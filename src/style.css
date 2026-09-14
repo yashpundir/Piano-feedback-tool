@@ -1,0 +1,252 @@
+:root {
+  --ink: #1a1a1a;
+  --paper: #fafaf8;
+  --card: #ffffff;
+  --border: #ddd8d0;
+  --accent: #2f5d50;
+  --accent-ink: #ffffff;
+  --amber: #c98a1d;
+  --red: #b8402f;
+  --green: #3a7d44;
+  --muted: #6b6b66;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.app-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+#app {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.card.subtle {
+  background: var(--paper);
+}
+
+.card.warn {
+  border-color: var(--amber);
+}
+
+h2 {
+  margin-top: 0;
+}
+
+.steps {
+  font-size: 1.15rem;
+  padding-left: 1.5rem;
+}
+
+.steps li {
+  margin-bottom: 0.5rem;
+}
+
+.field {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.field span {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.field.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field.checkbox span {
+  margin: 0;
+}
+
+select,
+input[type="number"] {
+  font-size: 1.1rem;
+  padding: 0.5rem;
+  width: 100%;
+  max-width: 320px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+button {
+  font-size: 1.1rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button + button {
+  margin-left: 0.75rem;
+}
+
+.error {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.live-count {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 1rem 0;
+}
+
+.raw-log {
+  margin-top: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.flag {
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.flag.pedal,
+.flag.mismatch {
+  background: #fbeee0;
+  border: 1px solid var(--amber);
+  color: #7a5312;
+}
+
+.submetric-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.submetric-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.submetric-row .bar-track {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.submetric-row .bar-fill {
+  height: 100%;
+}
+
+.note-strip {
+  overflow-x: auto;
+}
+
+.strip-grid {
+  display: grid;
+  gap: 2px;
+  font-size: 0.75rem;
+}
+
+.strip-label {
+  padding: 2px 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.strip-cell {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.strip-cell.g {
+  background: var(--green);
+}
+
+.strip-cell.a {
+  background: var(--amber);
+}
+
+.strip-cell.r {
+  background: var(--red);
+}
+
+.strip-cell.na {
+  background: #eee;
+}
+
+.strip-cell[title]:hover {
+  outline: 2px solid var(--ink);
+}
+
+#findings-list li {
+  margin-bottom: 0.5rem;
+}
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 60px;
+  margin-bottom: 1rem;
+}
+
+.sparkline .spark-bar {
+  width: 8px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scale Practice Feedback</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Scale Practice Feedback</h1>
+  </header>
+
+  <main id="app">
+    <section id="unsupported-screen" hidden>
+      <div class="card warn">
+        <h2>This browser can't hear your piano</h2>
+        <p>
+          This tool needs Web MIDI, which only works in <strong>Google Chrome</strong>
+          (Edge and Opera also work). Please open this page in Chrome and try again.
+        </p>
+      </div>
+    </section>
+
+    <section id="onboarding-screen" hidden>
+      <div class="card">
+        <h2>Get started</h2>
+        <ol class="steps">
+          <li>Plug in the USB cable from your piano.</li>
+          <li>You're already in Chrome — good.</li>
+          <li>Click Allow when Chrome asks for MIDI access.</li>
+        </ol>
+        <button id="connect-btn" class="primary">Connect my piano</button>
+        <p id="connect-error" class="error" hidden></p>
+      </div>
+    </section>
+
+    <section id="config-screen" hidden>
+      <div class="card">
+        <h2>Set up your practice run</h2>
+
+        <label class="field">
+          <span>Piano</span>
+          <select id="device-select"></select>
+        </label>
+
+        <label class="field">
+          <span>Octaves</span>
+          <select id="octaves-select">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Target tempo (BPM)</span>
+          <input id="bpm-input" type="number" min="20" max="240" placeholder="required" required />
+        </label>
+
+        <label class="field">
+          <span>Notes per beat</span>
+          <select id="notes-per-beat-select">
+            <option value="1">1 (quarter notes)</option>
+            <option value="2" selected>2 (eighth notes)</option>
+            <option value="4">4 (sixteenth notes)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Hand interval (semitones)</span>
+          <input id="hand-interval-input" type="number" value="12" min="0" max="24" />
+        </label>
+
+        <label class="field checkbox">
+          <input id="metronome-checkbox" type="checkbox" />
+          <span>Metronome click</span>
+        </label>
+
+        <div class="card subtle">
+          <h3>Before you start</h3>
+          <ul>
+            <li>Hands together.</li>
+            <li>Top note is played once, not twice.</li>
+            <li>No sustain pedal.</li>
+            <li>Start soft, grow to loudest at the top, return symmetrically.</li>
+          </ul>
+        </div>
+
+        <button id="start-btn" class="primary" disabled>Start run</button>
+        <p id="config-error" class="error" hidden></p>
+      </div>
+    </section>
+
+    <section id="run-screen" hidden>
+      <div class="card">
+        <h2>Recording…</h2>
+        <p class="hint">Play the scale. Click Stop when you're done.</p>
+        <div id="live-count" class="live-count">0 notes</div>
+        <button id="stop-btn" class="primary">Stop</button>
+        <div id="raw-log" class="raw-log"></div>
+      </div>
+    </section>
+
+    <section id="report-screen" hidden>
+      <div id="report-flags"></div>
+
+      <div class="card">
+        <h2>How you did</h2>
+        <div id="submetric-bars" class="submetric-bars"></div>
+      </div>
+
+      <div class="card">
+        <h2>Note by note</h2>
+        <div id="note-strip" class="note-strip"></div>
+      </div>
+
+      <div class="card">
+        <h2>Dynamics: your crescendo vs. the ideal</h2>
+        <canvas id="velocity-chart" width="900" height="260"></canvas>
+      </div>
+
+      <div class="card">
+        <h2>What to work on</h2>
+        <ul id="findings-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>History</h2>
+        <div id="history-sparkline" class="sparkline"></div>
+        <button id="export-btn">Export history (JSON)</button>
+        <button id="new-run-btn" class="primary">Practice again</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
