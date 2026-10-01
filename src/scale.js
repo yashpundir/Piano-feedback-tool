@@ -9,23 +9,29 @@ export const ROOT_PITCH = {
   C: 60,
 };
 
-// One octave ascending, root to root, 8 notes: standard fingering.
+// Fingering is stored as a 7-note repeating cycle plus the two notes that break it.
+//
+// A one-octave array can't be tiled directly: the finger on the root changes depending
+// on where in the run it falls. Ascending RH C major is 1,2,3,1,2,3,4 per octave with
+// the thumb landing on every octave boundary, and only the FINAL note takes 5 —
+// 2 octaves is 1,2,3,1,2,3,4,1,2,3,1,2,3,4,5, not ...4,5,2,3... The LH mirrors this:
+// 5 appears only on the very first note, and the thumb lands on each octave boundary.
+//
+//   cycle — finger per scale degree when passing THROUGH that degree mid-run
+//   first — finger on the lowest note of the run (differs from cycle[0] for LH)
+//   last  — finger on the highest note of the run (differs from cycle[0] for RH)
+//
+// This generalises to other scales, which break the pattern at different degrees:
+// F major RH needs cycle [1,2,3,4,1,2,3] (thumb after the B flat), B major LH needs
+// first = 4. Both fit without changing any code below.
 export const FINGERINGS = {
   C: {
     major: {
-      RH: [1, 2, 3, 1, 2, 3, 4, 5],
-      LH: [5, 4, 3, 2, 1, 3, 2, 1],
+      RH: { cycle: [1, 2, 3, 1, 2, 3, 4], first: 1, last: 5 },
+      LH: { cycle: [1, 4, 3, 2, 1, 3, 2], first: 5, last: 1 },
     },
   },
 };
-
-function tileFingering(oneOctave, octaves) {
-  const out = oneOctave.slice();
-  for (let o = 1; o < octaves; o++) {
-    out.push(...oneOctave.slice(1));
-  }
-  return out;
-}
 
 export function noteCount(octaves) {
   return 14 * octaves + 1;
@@ -69,8 +75,16 @@ export function generateSequence({ root = "C", mode = "major", octaves = 2, hand
 export function generateFingering({ root = "C", mode = "major", octaves = 2, hand = "RH" } = {}) {
   const table = FINGERINGS[root]?.[mode]?.[hand];
   if (!table) throw new Error(`No fingering table for ${root} ${mode} ${hand}`);
+  const { cycle, first, last } = table;
 
-  const ascFull = tileFingering(table, octaves); // length 7n+1
+  const top = 7 * octaves;
+  const ascFull = []; // length 7n+1
+  for (let j = 0; j <= top; j++) {
+    if (j === 0) ascFull.push(first);
+    else if (j === top) ascFull.push(last);
+    else ascFull.push(cycle[j % 7]);
+  }
+
   const descFull = ascFull.slice(0, ascFull.length - 1).reverse(); // length 7n
   return ascFull.concat(descFull); // length 14n+1
 }

@@ -85,7 +85,7 @@ them to a specific bar.
 
 | Decision | Value | Reason |
 |---|---|---|
-| Runtime | Browser, Web MIDI API | Zero install; target users are 50+ and non-technical |
+| Runtime | Browser, Web MIDI API | Zero install |
 | Distribution | Static site over HTTPS | Web MIDI requires a secure context |
 | Backend | None | Not needed for v1 |
 | Accounts | None | Sign-up is the drop-off point |
@@ -171,30 +171,60 @@ moment. So one run produces $N$ onsets per hand, $2N$ MIDI note events in total.
 
 ### Fingering and thumb crossings
 
-One fingering array is stored per scale per hand, ascending, one octave (8 entries):
+#### Why a one-octave array cannot simply be tiled
+
+The finger on the root note **depends on where in the run that root falls**. Ascending
+RH C major uses 1,2,3,1,2,3,4 per octave with the thumb landing on *every* octave
+boundary; finger 5 appears only on the very last note of the whole run. So two octaves is
+
+$$1,2,3,1,2,3,4,\underbrace{1}_{\text{C5}},2,3,1,2,3,4,5$$
+
+and **not** $\ldots,4,\mathbf{5},2,3,\ldots$ — putting 5 on the joining C5 would both be
+wrong fingering and, worse, hide a genuine thumb crossing at that note from the analysis.
+The left hand mirrors this: 5 appears only on the lowest note, and the thumb lands on
+each octave boundary.
+
+#### Storage model
+
+Each scale/hand stores a 7-note repeating **cycle** plus the two notes that break it:
 
 ```js
-const fingering = {
+export const FINGERINGS = {
   C: { major: {
-    RH: [1, 2, 3, 1, 2, 3, 4, 5],
-    LH: [5, 4, 3, 2, 1, 3, 2, 1],
+    RH: { cycle: [1, 2, 3, 1, 2, 3, 4], first: 1, last: 5 },
+    LH: { cycle: [1, 4, 3, 2, 1, 3, 2], first: 5, last: 1 },
   }},
 };
 ```
 
-Tiled across $n$ octaves, dropping the duplicated joining note, giving $F$ of length
-$7n+1$:
+| Field | Meaning |
+|---|---|
+| `cycle` | Finger per scale degree when passing **through** that degree mid-run |
+| `first` | Finger on the lowest note of the run (differs from `cycle[0]` for LH) |
+| `last` | Finger on the highest note of the run (differs from `cycle[0]` for RH) |
 
-$$F_j = \begin{cases} f_j & 0 \le j \le 7 \\[4pt] f_{\left((j-1) \bmod 7\right) + 1} & j > 7 \end{cases}$$
+The ascending fingering $F$, of length $7n+1$, is then
 
-and then folded for the descent exactly as the pitches are, giving length $14n+1$.
+$$F_j = \begin{cases}
+\texttt{first} & j = 0 \\[4pt]
+\texttt{cycle}\!\left[\,j \bmod 7\,\right] & 0 < j < 7n \\[4pt]
+\texttt{last} & j = 7n
+\end{cases}$$
 
-Crossings are **derived**, not hardcoded — a crossing is any place the finger number
-does not move by exactly one:
+and is folded for the descent exactly as the pitches are, giving length $14n+1$.
+
+This generalises to scales that break the pattern at different degrees — F major RH needs
+`cycle: [1,2,3,4,1,2,3]` (thumb after the B♭), B major LH needs `first: 4` — with no code
+change. Some scales may eventually need a distinct descending cycle too; see §14.
+
+#### Deriving crossings
+
+Crossings are **derived**, not hardcoded — a crossing is any place the finger number does
+not move by exactly one:
 
 $$C = \left\{\, j \ge 1 \;:\; |F_j - F_{j-1}| \neq 1 \,\right\}$$
 
-This is why adding a new scale means adding one array and nothing else. The crossing
+This is why adding a scale means adding one table entry and nothing else. The crossing
 indices are known before the player touches a key.
 
 Worked example, C major, 1 octave, right hand. The folded fingering is
@@ -205,11 +235,15 @@ Differences of 1 everywhere except $j=3$ ($|1-3| = 2$, the thumb passing under o
 way up to F) and $j=12$ ($|3-1| = 2$, the third finger crossing over on the way back
 down). So $C = \{3, 12\}$.
 
-The hands cross at **different** indices — the left hand's C major crossing is at
-position 4 ascending, not 3 — so crossings are computed per hand, not shared.
+For 2 octaves the derived sets are
 
-For 2 octaves the derived sets are $C_{RH} = \{3, 8, 10, 19, 21, 26\}$ and
-$C_{LH} = \{5, 8, 12, 17, 21, 24\}$.
+$$C_{RH} = \{3, 7, 10, 19, 22, 26\} \qquad C_{LH} = \{5, 8, 12, 17, 21, 24\}$$
+
+$C_{RH}$ now correctly includes $j=7$ and $j=22$ — the ascending and descending octave
+joins at C5, where the thumb crosses.
+
+The hands cross at **different** indices, so crossings are computed per hand, never
+shared.
 
 ---
 
@@ -824,7 +858,7 @@ these objects):
     },
     "sync": { "bias": -8.4, "error": 11.2 },
     "crossings": {
-      "indices": { "RH": [3, 8, 10, 19, 21, 26], "LH": [5, 8, 12, 17, 21, 24] },
+      "indices": { "RH": [3, 7, 10, 19, 22, 26], "LH": [5, 8, 12, 17, 21, 24] },
       "RH": { "bumpV": 9.1, "bumpT": 15.3 },
       "LH": { "bumpV": 4.2, "bumpT": 11.8 }
     },
@@ -919,7 +953,7 @@ metric is `null` and every unreliable run carries a visible flag.
 | Unsupported-browser detection | ✅ |
 | Three-step onboarding, config screen, start/stop run control | ✅ |
 | C major sequence generation, 1–4 octaves | ✅ |
-| Fingering tiling and crossing derivation, per hand | ✅ |
+| Fingering expansion and crossing derivation, per hand | ✅ |
 | Hand separation by onset clustering | ✅ |
 | Timing decomposition (offset, drift, jitter) | ✅ |
 | Note correctness — greedy aligner with lookahead | ✅ |
@@ -1007,10 +1041,18 @@ that whole class of misreport.
 The data structures are already general. Adding a scale requires:
 
 1. An interval array in `SCALES` (or a root pitch in `ROOT_PITCH`).
-2. A one-octave ascending fingering array per hand in `FINGERINGS`.
+2. A `{ cycle, first, last }` fingering entry per hand in `FINGERINGS` (see §3).
 
-Everything else — sequence folding, fingering tiling, crossing derivation, every metric —
-is derived. Nothing else in the codebase needs to change.
+Everything else — sequence folding, fingering expansion, crossing derivation, every
+metric — is derived. Nothing else in the codebase needs to change.
+
+**One known limit of the fingering model.** It assumes the descent reuses the ascending
+fingering reversed, which holds for C major and most standard scales. Scales where the
+conventional descending fingering differs from the reversed ascending one would need a
+separate descending cycle — a field addition, not a redesign, but it will need handling
+before those scales ship. Likewise, the model assumes one fixed cycle per hand per
+scale; it does not express fingerings that change between the first and later octaves
+beyond the `first`/`last` overrides.
 
 ### v2.4 — Cross-run aggregation
 
@@ -1082,7 +1124,7 @@ built on), so it runs the same way the app does: open `test/index.html` in a bro
 | Area | What's covered |
 |---|---|
 | Sequence generation | Note count and peak index formulas, the top note struck once not twice, descending mirrors ascending, LH = RH − interval |
-| Fingering / crossings | Derived crossing indices for a known fingering, and that LH and RH cross at different indices |
+| Fingering / crossings | Full 2-octave fingering for both hands (thumb on the octave join, 5 only on the terminal note), derived crossing indices for 1 and 2 octaves, and that LH and RH cross at different indices |
 | Pure math | `linreg` recovers a known slope/intercept exactly; `idealRamp` peaks at exactly 1 |
 | Note alignment | Exact match, one insertion, one deletion, one substitution — each classified correctly, not cascaded |
 | Full pipeline (`analyzeRun`) | A clean run scores clean across every metric; hand-pitch-overlap doesn't break separation (see below); one wrong note doesn't tank overall accuracy; a hand-count mismatch flags the run and nulls timing/sync while still computing dynamics; the pedal flag propagates; an all-flat-velocity run degrades to documented values (§12) instead of `NaN` or a crash |

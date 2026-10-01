@@ -1,7 +1,7 @@
-import { test, assert, assertEqual, assertClose } from "./assert.js";
+import { test, assert, assertEqual, assertClose, assertDeepEqual } from "./assert.js";
 import { generateSequence, generateFingering, deriveCrossings } from "../src/scale.js";
 import { analyzeRun } from "../src/run.js";
-import { linreg, mean } from "../src/stats.js";
+import { linreg } from "../src/stats.js";
 import { idealRamp, alignGreedy } from "../src/metrics.js";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +52,29 @@ test("fingering: LH and RH cross at different indices (they must be computed per
   const crossRH = deriveCrossings(generateFingering({ octaves: 1, hand: "RH" }));
   const crossLH = deriveCrossings(generateFingering({ octaves: 1, hand: "LH" }));
   assert(JSON.stringify(crossRH) !== JSON.stringify(crossLH), "hands should not cross at the same notes");
+});
+
+test("fingering: RH 2 octaves ascending puts the thumb on the octave join, not finger 5", () => {
+  // The bug this guards: tiling a one-octave array [1,2,3,1,2,3,4,5] leaves 5 on the
+  // joining C5 instead of the thumb. That note IS a thumb crossing, so the old version
+  // silently hid a real crossing from the analysis.
+  const asc = generateFingering({ octaves: 2, hand: "RH" }).slice(0, 15);
+  assertDeepEqual(asc, [1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 1, 2, 3, 4, 5]);
+  assertEqual(asc[7], 1, "the octave join must be the thumb");
+});
+
+test("fingering: LH 2 octaves ascending uses 5 only on the lowest note", () => {
+  const asc = generateFingering({ octaves: 2, hand: "LH" }).slice(0, 15);
+  assertDeepEqual(asc, [5, 4, 3, 2, 1, 3, 2, 1, 4, 3, 2, 1, 3, 2, 1]);
+  assertEqual(asc.slice(1).includes(5), false, "5 should appear only on the first note");
+});
+
+test("fingering: 2-octave crossings include the octave joins", () => {
+  const crossRH = deriveCrossings(generateFingering({ octaves: 2, hand: "RH" }));
+  const crossLH = deriveCrossings(generateFingering({ octaves: 2, hand: "LH" }));
+  assertDeepEqual(crossRH, [3, 7, 10, 19, 22, 26], "RH: thumb under at F4, C5, F5 then mirrored");
+  assertDeepEqual(crossLH, [5, 8, 12, 17, 21, 24]);
+  assert(crossRH.includes(7), "C5 (the octave join) must be detected as a crossing");
 });
 
 // ---------------------------------------------------------------------------
