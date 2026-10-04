@@ -82,6 +82,57 @@ export function renderSubmetrics(container, run) {
   }
 }
 
+// Per-hand timing drill-down. Deliberately a table of raw numbers rather than bars:
+// per-hand jitter is NOT comparable to the paired jitter above it (averaging two
+// independent onsets halves the noise variance, so paired jitter reads ~1/√2 of
+// per-hand jitter even when nothing is wrong). Bars side by side would invite exactly
+// that false comparison.
+export function renderPerHandTiming(container, run) {
+  container.innerHTML = "";
+  const ph = run.metrics.timingPerHand;
+  if (!ph || (!ph.L && !ph.R)) {
+    container.textContent = "Not enough notes in one hand to measure each hand separately.";
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "perhand-table";
+  table.innerHTML = `
+    <thead><tr><th></th><th>Tempo (offset)</th><th>Drift</th><th>Jitter</th></tr></thead>
+    <tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+
+  const signed = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+  for (const [key, label] of [["R", "Right hand"], ["L", "Left hand"]]) {
+    const t = ph[key];
+    const tr = document.createElement("tr");
+    tr.innerHTML = t
+      ? `<th>${label}</th><td>${signed(t.offset)}</td><td>${signed(t.drift)}</td><td>${(t.jitter * 100).toFixed(1)}%</td>`
+      : `<th>${label}</th><td colspan="3">not enough notes</td>`;
+    tbody.appendChild(tr);
+  }
+  container.appendChild(table);
+
+  if (ph.driftDifference !== null) {
+    const diff = ph.driftDifference;
+    const note = document.createElement("p");
+    note.className = "hint";
+    if (Math.abs(diff) > 0.1) {
+      const slowing = diff > 0 ? "left" : "right";
+      note.textContent = `Drift difference ${signed(diff)} — your ${slowing} hand is losing tempo relative to the other over the run.`;
+    } else {
+      note.textContent = `Drift difference ${signed(diff)} — both hands are holding tempo about equally.`;
+    }
+    container.appendChild(note);
+  }
+
+  const caveat = document.createElement("p");
+  caveat.className = "hint caveat";
+  caveat.textContent =
+    "These are each hand measured against its own pulse, so they don't line up with the combined jitter above — averaging two hands cancels some of the noise, which makes the combined figure read lower by design. Compare each hand to the other, not to the headline number.";
+  container.appendChild(caveat);
+}
+
 function colorClass(value, greenMax, amberMax) {
   if (value === null || value === undefined || Number.isNaN(value)) return "na";
   const v = Math.abs(value);

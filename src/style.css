@@ -190,6 +190,32 @@ button + button {
   height: 100%;
 }
 
+.perhand-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 520px;
+  margin-bottom: 0.75rem;
+}
+
+.perhand-table th,
+.perhand-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.perhand-table thead th {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.hint.caveat {
+  font-size: 0.85rem;
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+}
+
 .note-strip {
   overflow-x: auto;
 }

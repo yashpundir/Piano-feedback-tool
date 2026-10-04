@@ -389,3 +389,234 @@ It appears in three distinct roles, which is why the setting is mandatory:
    $\text{jitter} = 0.05$ means the same thing at both.
 3. **The clustering window** for hand separation, $w = \operatorname{clamp}(T/2, 40, 200)$ —
    see Q3.
+
+---
+
+## Batch 2 — 2026-10-04
+
+### 2.2 The LH `cycle` looks wrong — wouldn't it give `[5,1,4,3,2,1,3,2,...]`?
+
+Good catch to check, but no — the table is right, and the confusion is in how `first`
+interacts with the cycle. **`first` is an override at position 0, not an extra entry
+prepended to the cycle.** The array it builds is $7n+1$ long, not $7n+2$.
+
+The giveaway is the `else if` structure of the formula: exactly one of the three branches
+fires for each $j$, so position 0 takes `first` *instead of* `cycle[0]`, never as well as.
+
+Expanding the LH table — `cycle: [1,4,3,2,1,3,2]`, `first: 5`, `last: 1` — for $n = 2$:
+
+| $j$ | Rule that fires | Finger | Note |
+|---|---|---|---|
+| 0 | `first` (overrides `cycle[0]`) | **5** | C3 |
+| 1 | `cycle[1]` | 4 | D3 |
+| 2 | `cycle[2]` | 3 | E3 |
+| 3 | `cycle[3]` | 2 | F3 |
+| 4 | `cycle[4]` | 1 | G3 |
+| 5 | `cycle[5]` | 3 | A3 |
+| 6 | `cycle[6]` | 2 | B3 |
+| 7 | `cycle[0]`, since $7 \bmod 7 = 0$ | **1** | C4 — octave join, thumb |
+| 8 | `cycle[1]` | 4 | D4 |
+| 9 | `cycle[2]` | 3 | E4 |
+| 10 | `cycle[3]` | 2 | F4 |
+| 11 | `cycle[4]` | 1 | G4 |
+| 12 | `cycle[5]` | 3 | A4 |
+| 13 | `cycle[6]` | 2 | B4 |
+| 14 | `last` (overrides `cycle[0]`) | **1** | C5 — top note |
+
+Reading the finger column top to bottom:
+
+$$5,4,3,2,1,3,2,1,4,3,2,1,3,2,1$$
+
+which is exactly the `543213214321321` you said was correct. This is asserted as a test,
+so it can't drift: `fingering: LH 2 octaves ascending uses 5 only on the lowest note`.
+
+**Why `cycle[0] = 1` rather than 5.** `cycle[0]` is the finger used on the root when
+passing *through* it mid-run — and mid-run, the LH root gets the thumb. The 5 is a
+one-off on the lowest note of the whole run, which is precisely what `first` encodes. If
+`cycle[0]` were 5, every octave boundary would get the little finger, which is the
+mirror image of the bug this model replaced.
+
+---
+
+### 2.2b Will it really scale to all scales?
+
+Fair to keep pressing on this. The honest answer has two halves.
+
+**For every 7-note scale — all major and minor keys — yes.** The model expresses any
+fingering of the form "a 7-periodic pattern, with independent overrides on the first and
+last note of the run," which is the structure conventional scale fingerings actually
+have. Three worked cases:
+
+| Scale | `cycle` | `first` | `last` | One octave |
+|---|---|---|---|---|
+| C major RH | `[1,2,3,1,2,3,4]` | 1 | 5 | `1,2,3,1,2,3,4,5` |
+| F major RH | `[1,2,3,4,1,2,3]` | 1 | 4 | `1,2,3,4,1,2,3,4` |
+| B♭ major RH | `[4,1,2,3,1,2,3]` | 2 | 4 | `2,1,2,3,1,2,3,4` |
+
+B♭ is the interesting one: the root is a black key the thumb never plays, so `first` (2)
+and `cycle[0]` (4) and `last` (4) are three different things — and the model takes it
+without a code change. That's the general test of whether the abstraction is right, and
+it passes.
+
+**I have now also removed the hardcoded 7.** You asked for the fingering code to scale
+properly, and while answering I found that `noteCount`, `peakIndex` and
+`generateFingering` all assumed 7 degrees per octave even though pitch generation already
+read the length of the interval array. For diatonic scales they agreed; for a pentatonic
+or whole-tone scale they would have disagreed silently — a sequence of one length checked
+against a fingering of another. All three now derive it:
+
+$$d = |I| \qquad N = 2dn + 1 \qquad k = dn \qquad F_j = \texttt{cycle}\!\left[j \bmod d\right]$$
+
+and `generateFingering` throws if a table's `cycle` length doesn't match its scale's
+degree count, so a mismatched table fails loudly at the point of the mistake rather than
+producing a misaligned analysis.
+
+**What it still cannot express**, recorded in §14 rather than discovered later:
+
+1. **A descending fingering that isn't the ascending one reversed.** True for C major and
+   most standard scales; a scale needing otherwise would need a second cycle. A field
+   addition, not a redesign.
+2. **A fingering that changes between octaves** beyond the `first`/`last` overrides —
+   which some players do adopt in 3- and 4-octave scales.
+
+Neither blocks the planned major/minor keys. Both will need deciding before the scales
+that need them ship.
+
+---
+
+### 6. Are the residuals measured against the fitted line or against the ideal $T$?
+
+Against the fitted line — and your instinct that this looks backwards is a reasonable
+reading of the formula, so it's worth spelling out why it's the right choice. (I've also
+added the derivation below to `DOCUMENTATION.md` §7.1, since the document previously
+asserted the three components were orthogonal without showing it.)
+
+First, to answer the literal question: in $r_i = \mathrm{IOI}_i - (a + b\,i)$, the
+$\mathrm{IOI}_i$ is the **actual played** interval. Every $\mathrm{IOI}$ in §7.1 is
+actual; $T$ is the only ideal quantity in the section.
+
+#### The fitted line is not an estimate of the data
+
+That's the crux of it. $a + b\,i$ models the **systematic** part of the error — the part
+with structure, which is to say the part attributable to a nameable fault. Subtracting it
+leaves only the unsystematic part. "How far you fell from your own trend" *is* the
+definition of unevenness.
+
+Both quantities you're weighing up exist, and the decomposition uses both. Since
+$a = \overline{\mathrm{IOI}} - b\,\bar{\imath}$, the fitted line is
+$a + b\,i = \overline{\mathrm{IOI}} + b(i - \bar{\imath})$, and substituting gives
+
+$$\underbrace{\mathrm{IOI}_i - T}_{\text{what you expected to use}} \;=\; \underbrace{\left(\overline{\mathrm{IOI}} - T\right)}_{\textsf{offset}} \;+\; \underbrace{b\,(i - \bar{\imath})}_{\textsf{drift}} \;+\; \underbrace{r_i}_{\textsf{jitter}}$$
+
+So $\mathrm{IOI}_i - T$ — the actual-versus-ideal difference you had in mind — is not
+discarded at all. It's the left-hand side. The three metrics are its three slices: the
+part that's constant across the run, the part that grows through the run, and the
+leftover. `offset` and `drift` are the actual-versus-ideal comparison; they're just the
+*structured* portion of it.
+
+#### Why jitter can't be the one doing that comparison
+
+If jitter were the spread of $\mathrm{IOI}_i - T$, it would absorb the other two faults:
+
+| The player | Target-relative jitter says | Truth |
+|---|---|---|
+| Perfectly even tempo, 10% too slow throughout | Huge jitter on every note | Nothing was uneven. The fault is `offset`. |
+| Smooth steady acceleration, every note exactly on the accelerating trend | Large jitter at both ends | Nothing was ragged. The fault is `drift`. |
+
+Both players would be told "your notes are uneven," which is false and, worse,
+unactionable — the fix for playing too slow is not "slow down until your notes are even."
+The three numbers would become three ways of saying "something is off."
+
+#### Why "estimated from the same data" isn't circular
+
+Two properties of least squares with an intercept make the split clean:
+
+$$\sum_i r_i = 0 \qquad\text{and}\qquad \sum_i (i - \bar{\imath})\,r_i = 0$$
+
+The residuals contain **no constant component and no linear trend** — not approximately,
+exactly, as an algebraic consequence of how $a$ and $b$ are chosen. So nothing `offset`
+or `drift` explains can leak into `jitter`. Fitting from the data is what *guarantees*
+the separation rather than undermining it.
+
+The cost is two degrees of freedom: the line is fitted from $N-1$ intervals, so the
+residuals have $N-3$ degrees of freedom, and jitter is very slightly optimistic because
+the line was fitted to the same points it's being measured against. At $N = 29$ this is a
+few percent and comfortably below the measurement's real uncertainties. Worth knowing;
+not worth correcting at v1.
+
+---
+
+### 7. What is jitter measuring, and why RMS?
+
+#### What it measures
+
+**Note-to-note unevenness: individual notes landing early or late relative to the
+player's own tempo.** Explicitly not "wrong tempo" (that's `offset`) and not "tempo
+changing over the run" (that's `drift`). It's the raggedness left after both of those are
+accounted for — the thing you hear as a scale not being *clean* even though it's at the
+right speed and holds that speed.
+
+$$\text{jitter} = \frac{\sqrt{\dfrac{1}{N-1}\sum_i r_i^2}}{T}$$
+
+Dividing by $T$ makes it dimensionless: $\text{jitter} = 0.05$ means typical note-to-note
+error is 5% of a beat, which means the same thing at 40 BPM and at 200 BPM. 20 ms of
+wobble is sloppy at 200 BPM and inaudible at 40.
+
+#### Why RMS
+
+Four reasons, roughly in order of how much they matter:
+
+1. **It is the standard deviation of your note timing.** Because $\sum_i r_i = 0$, the
+   RMS of the residuals is exactly their population standard deviation. So jitter has a
+   plain-language reading — "the standard deviation of your note placement, as a fraction
+   of a beat" — rather than being an arbitrary index.
+2. **It's the quantity the fit already minimises.** The residuals come from a
+   least-squares fit, which by definition minimises the sum of squares. Measuring the
+   leftovers with the same norm the fit used is self-consistent; scoring them with a
+   different norm would be measuring the model by a standard it wasn't built to.
+3. **It penalises conspicuous errors more than diffuse ones.** Squaring means one note
+   100 ms late counts for more than four notes 25 ms late. That matches how unevenness is
+   actually heard: a single late note is an audible *event*, while a small uniform wobble
+   just sounds human.
+4. **Variances add.** If jitter is ever aggregated across runs (§14), RMS composes
+   correctly under averaging; a mean-absolute measure doesn't.
+
+#### The honest counter-argument
+
+RMS is **sensitive to outliers**, so one fumbled note can dominate the figure for an
+otherwise even run. Mean absolute deviation would be more robust. I think RMS is still
+right — a stumble arguably *should* register as unevenness, and §7.2 already separates
+wrong notes from timing — but it's a genuine judgement call, and if real runs show jitter
+being driven by single events, a trimmed RMS (discard the worst one or two residuals) is
+the fallback.
+
+Worth noting a related inconsistency in the document: `jitter` and `sync_error` use RMS,
+while `shape` and `lumpiness` (§7.3) use mean-absolute measures, chosen there for ease of
+explanation. The reasoning differs per metric, but it does mean the report mixes two
+notions of "average error." Not wrong, but worth settling deliberately if the metrics are
+ever recalibrated.
+
+---
+
+### Implemented from 4.2: per-hand timing
+
+Now built, per your go-ahead:
+
+- `metrics.timingPerHand` carries `L`, `R` (each with `offset`, `drift`, `jitter`) and
+  the signed `driftDifference` $= \text{drift}^L - \text{drift}^R$.
+- Computed from each hand's own onsets, so — unlike the paired metrics — **it still works
+  on a hand-count-mismatched run**, where timing was previously skipped entirely.
+- A "Timing, hand by hand" panel in the report, deliberately a table rather than bars,
+  carrying an on-screen note that these figures aren't comparable to the headline jitter
+  (the $\sqrt{2}$ effect from §7.1).
+- A finding: *"Your left hand is losing tempo relative to your right hand over the run"*,
+  triggered at $|\text{driftDifference}| > 0.1$, which is the fault that previously had
+  no way to be named.
+- Four new tests, including one that synthesises a run where only the left hand
+  decelerates and asserts the drift difference attributes it to that hand.
+
+One incidental fix found while doing it: `metrics.timing` had been persisting its
+`IOI`/`residuals` arrays into `localStorage`, contradicting §10's schema and §10's own
+claim that intermediate arrays are stripped. Stored metrics now carry scalars only, with
+the arrays confined to the in-memory `_detail` the report renders from — asserted by a
+test.

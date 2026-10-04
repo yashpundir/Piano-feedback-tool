@@ -482,9 +482,57 @@ $$\boxed{\ \text{jitter} = \frac{\sqrt{\dfrac{1}{N-1}\displaystyle\sum_i r_i^2}}
 | `drift` | Failing to hold one tempo across the run | Practising with a reference |
 | `jitter` | Individual notes landing early or late | Slowing down until notes are even |
 
-The three are orthogonal — they do not overlap, and together they account for the total
-deviation. `drift` multiplies the per-note slope $b$ by the span of the run, so it reads
-as "the total tempo change from first interval to last, as a fraction of a beat."
+`drift` multiplies the per-note slope $b$ by the span of the run, so it reads as "the
+total tempo change from first interval to last, as a fraction of a beat."
+
+#### Why the three components exactly account for the error
+
+The claim that they don't overlap isn't a hand-wave; it follows from the fit. Since
+$a = \overline{\mathrm{IOI}} - b\,\bar{\imath}$, the fitted line can be rewritten as
+
+$$a + b\,i = \overline{\mathrm{IOI}} + b\,(i - \bar{\imath})$$
+
+Substituting that into $r_i = \mathrm{IOI}_i - (a + b\,i)$ and rearranging gives the
+total error of each interval against the target, split into three terms:
+
+$$\underbrace{\mathrm{IOI}_i - T}_{\text{total error}} \;=\; \underbrace{\left(\overline{\mathrm{IOI}} - T\right)}_{\text{constant} \;\to\; \textsf{offset}} \;+\; \underbrace{b\,(i - \bar{\imath})}_{\text{linear in } i \;\to\; \textsf{drift}} \;+\; \underbrace{r_i}_{\text{the rest} \;\to\; \textsf{jitter}}$$
+
+Each term captures a different *shape* of error: one that is the same for every note, one
+that grows steadily through the run, and one that is left over. And they are orthogonal
+in the least-squares sense — ordinary least squares with an intercept guarantees
+
+$$\sum_i r_i = 0 \qquad\text{and}\qquad \sum_i (i - \bar{\imath})\, r_i = 0$$
+
+so the residuals carry no constant component and no linear trend. That is precisely what
+"no double counting" means here: nothing that `offset` or `drift` already explains can
+reappear inside `jitter`.
+
+#### Why jitter is measured against the fitted line, not against $T$
+
+This is the step that looks backwards at first glance — the residual is the difference
+between real data and a line fitted *to that same data*, so what is it telling us?
+
+The answer is that $a + b\,i$ is not an estimate of the data; it is a model of the
+**systematic** part of the error. Subtracting it is what removes the systematic part, so
+that what remains is only the unsystematic part — which is the definition of unevenness.
+
+The alternative — defining jitter as the spread of $\mathrm{IOI}_i - T$ — fails on two
+concrete cases:
+
+| The player | $\mathrm{IOI}_i - T$ would say | Which is |
+|---|---|---|
+| Held a flawlessly even tempo, but 10% too slow throughout | Huge jitter on every note | Wrong — their notes were perfectly even. The fault is `offset`. |
+| Accelerated smoothly and steadily, every note exactly on the accelerating trend | Large jitter at both ends of the run | Wrong — nothing was ragged. The fault is `drift`. |
+
+In both cases a target-relative jitter absorbs a fault that already has its own metric,
+and the three numbers collapse into three different ways of saying "something is off"
+without distinguishing which thing. Measuring against the player's own trend is what
+makes `jitter` answer its own question — *given the tempo you were actually playing, how
+consistent were you?* — and keeps the three diagnoses independently actionable.
+
+The quantity $\mathrm{IOI}_i - T$ is not discarded, incidentally. It is the total error
+on the left-hand side of the identity above, and the report shows it indirectly: `offset`
+and `drift` are precisely the two systematic slices of it.
 
 **Signs are preserved in the report.** Rushing and dragging are different faults with
 different causes, and a player told only "your timing is off by 8%" cannot act on it.
@@ -493,6 +541,40 @@ Absolute values are taken only when folding into a score (v2).
 Suggested weighting within the timing sub-score: jitter heaviest, drift moderate,
 offset lightest. A player who held a perfectly steady tempo that happened to be 5% slow
 is in much better shape than one who averaged the right tempo while lurching.
+
+#### Per-hand timing
+
+The three metrics above are computed on the paired timeline $\tau$, which answers "was
+the music even?". They are also computed **per hand**, on each hand's own onsets, which
+answers "and if not, which hand?"
+
+$$\text{offset}^h,\ \text{drift}^h,\ \text{jitter}^h \quad\text{from}\quad \mathrm{IOI}^h_i = t^h_{i+1} - t^h_i$$
+
+This exists because of a fault the paired timeline attributes poorly: **one hand changing
+tempo while the other holds steady.** If the left hand decelerates and the right does
+not, $\tau$ averages the two, so `drift` reads roughly *half* the left hand's true drift,
+while the growing asynchrony inflates `sync_error`. The fault is detected but described
+as "slight drift plus ragged hands" rather than "your left hand is slowing down." The
+difference
+
+$$\text{driftDifference} = \text{drift}^L - \text{drift}^R$$
+
+states that fault as a single signed number, and is what the finding in §9 reports.
+
+Per-hand timing needs no pairing, so unlike the paired metrics it is still computed on a
+hand-count-mismatched run.
+
+> **The per-hand and paired numbers are not comparable, by construction.** Model each
+> hand's onset as the true pulse plus independent noise of variance $\sigma_a^2$. The
+> paired timeline carries
+> $$\operatorname{Var}\!\left(\frac{a^L + a^R}{2}\right) = \frac{\sigma_a^2}{2}$$
+> — half the variance of either hand alone, so paired jitter reads lower than per-hand
+> jitter by a factor of about $\sqrt{2}$ even when nothing whatsoever is wrong. This is
+> a property of averaging, not of the playing. The UI states it on screen and
+> deliberately renders per-hand timing as a table rather than as bars beside the
+> headline figure, because side-by-side bars would invite exactly that false comparison.
+> It is also a reason to prefer $\tau$ for the headline: it is a genuinely less noisy
+> estimate of the pulse.
 
 ---
 
@@ -762,6 +844,16 @@ it has not earned:
 Fills are clamped to $[0,1]$ and coloured green above 70%, amber above 40%, red below.
 These divisors are display conveniences chosen for legibility, **not** empirical anchors.
 
+### Layer 2b — per-hand timing drill-down
+
+*And if the timing was off, which hand?* A plain table of each hand's offset, drift and
+jitter, plus the signed drift difference and a one-line reading of it ("your left hand is
+losing tempo relative to the other over the run").
+
+Rendered as a table rather than bars, and carrying an on-screen note that these figures
+don't line up with the headline jitter — see the $\sqrt{2}$ caveat in §7.1. Showing them
+as bars next to the combined figure would imply a comparison that is meaningless.
+
 ### Layer 3 — the per-note strip
 
 *Where exactly?* One cell per note, laid out left to right in playing order, one row per
@@ -810,6 +902,7 @@ Each candidate finding carries a severity, and the three highest survive:
 | Wrong tempo | $\lvert\text{offset}\rvert > 0.05$ | $\lvert\text{offset}\rvert \times 10$ |
 | Tempo drift | $\lvert\text{drift}\rvert > 0.1$ | $\lvert\text{drift}\rvert \times 5$ |
 | Uneven notes | $\text{jitter} > 0.08$ | $\text{jitter} \times 8$ |
+| One hand losing tempo | $\lvert\text{driftDifference}\rvert > 0.1$ | $\lvert\text{driftDifference}\rvert \times 5$ |
 | Hand imbalance | $\lvert\text{balance}\rvert > 10$ | $\lvert\text{balance}\rvert / 10$ |
 | Detached | $\text{articulation} > 0.3$ | $\text{articulation} \times 3$ |
 | Overlapping | $\text{articulation} < -0.2$ | $\lvert\text{articulation}\rvert \times 3$ |
@@ -851,6 +944,11 @@ these objects):
   "handMismatch": false,
   "metrics": {
     "timing": { "offset": 0.03, "drift": -0.08, "jitter": 0.057 },
+    "timingPerHand": {
+      "L": { "offset": 0.04, "drift": 0.06, "jitter": 0.081 },
+      "R": { "offset": 0.02, "drift": -0.09, "jitter": 0.074 },
+      "driftDifference": 0.15
+    },
     "correctness": { "M": 58, "S": 0, "I": 1, "D": 0, "accuracy": 0.983 },
     "dynamics": {
       "R": { "shape": 0.91, "range": 58, "reversals": [4, 9], "lumpiness": 0.22 },
@@ -955,7 +1053,8 @@ metric is `null` and every unreliable run carries a visible flag.
 | C major sequence generation, 1–4 octaves | ✅ |
 | Fingering expansion and crossing derivation, per hand | ✅ |
 | Hand separation by onset clustering | ✅ |
-| Timing decomposition (offset, drift, jitter) | ✅ |
+| Timing decomposition (offset, drift, jitter) on the paired timeline | ✅ |
+| Per-hand timing + drift difference, with drill-down panel and finding | ✅ |
 | Note correctness — greedy aligner with lookahead | ✅ |
 | Dynamics — shape, range, reversals, lumpiness, per hand | ✅ |
 | Hand synchronisation — bias and error | ✅ |
@@ -1128,6 +1227,8 @@ built on), so it runs the same way the app does: open `test/index.html` in a bro
 | Pure math | `linreg` recovers a known slope/intercept exactly; `idealRamp` peaks at exactly 1 |
 | Note alignment | Exact match, one insertion, one deletion, one substitution — each classified correctly, not cascaded |
 | Full pipeline (`analyzeRun`) | A clean run scores clean across every metric; hand-pitch-overlap doesn't break separation (see below); one wrong note doesn't tank overall accuracy; a hand-count mismatch flags the run and nulls timing/sync while still computing dynamics; the pedal flag propagates; an all-flat-velocity run degrades to documented values (§12) instead of `NaN` or a crash |
+| Per-hand timing | Both hands measured on a clean run; a synthetic run where only the left hand decelerates is correctly attributed to that hand via `driftDifference`; per-hand timing survives a hand-count mismatch; stored `metrics.timing` carries scalars only, with the residual arrays confined to `_detail` per the §10 schema |
+| Report rendering | Every renderer called against a real run object and checked for emitting output — a smoke test for DOM typos, which the pure-function tests cannot catch — plus the per-hand panel's empty state and the drift-difference finding wording |
 
 Because the metric modules (`stats.js`, `scale.js`, `metrics.js`, `run.js`) have no DOM
 or MIDI dependency, this same suite would port to a real runner (Vitest, Jest, Node's

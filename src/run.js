@@ -51,13 +51,29 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
   const legatoL = L.length > 1 ? computeLegato(L, T) : null;
   const legatoR = R.length > 1 ? computeLegato(R, T) : null;
 
-  let timing = null;
+  // Per-hand timing needs only one hand's own onsets, so unlike the paired timeline it
+  // survives a hand-count mismatch. Scalars only — the IOI/residual arrays stay in
+  // _detail so the stored run matches the schema in DOCUMENTATION.md §10.
+  const timingScalars = (t) => (t ? { offset: t.offset, drift: t.drift, jitter: t.jitter } : null);
+  const timingLFull = L.length > 1 ? computeTiming(L.map((e) => e.onset), T) : null;
+  const timingRFull = R.length > 1 ? computeTiming(R.map((e) => e.onset), T) : null;
+  const timingPerHand =
+    timingLFull || timingRFull
+      ? {
+          L: timingScalars(timingLFull),
+          R: timingScalars(timingRFull),
+          // The "one hand is slowing relative to the other" fault, as a single number.
+          driftDifference: timingLFull && timingRFull ? timingLFull.drift - timingRFull.drift : null,
+        }
+      : null;
+
+  let timingFull = null;
   let sync = null;
   let crossings = null;
 
   if (!mismatched && paired.length > 1) {
     const tau = paired.map((p) => (p.L.onset + p.R.onset) / 2);
-    timing = computeTiming(tau, T);
+    timingFull = computeTiming(tau, T);
     sync = computeSync(paired);
 
     if (dynamicsL && dynamicsR) {
@@ -67,8 +83,8 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
       const crossLH = deriveCrossings(fingerLH.slice(0, L.length));
       const velResR = R.map((e, i) => e.velocity - dynamicsR.idealVelocities[i]);
       const velResL = L.map((e, i) => e.velocity - dynamicsL.idealVelocities[i]);
-      const bumpRH = computeCrossingBump(crossRH, velResR, timing.residuals);
-      const bumpLH = computeCrossingBump(crossLH, velResL, timing.residuals);
+      const bumpRH = computeCrossingBump(crossRH, velResR, timingFull.residuals);
+      const bumpLH = computeCrossingBump(crossLH, velResL, timingFull.residuals);
       crossings = {
         indices: { RH: crossRH, LH: crossLH },
         RH: bumpRH,
@@ -85,7 +101,8 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
     pedalDetected,
     handMismatch: mismatched,
     metrics: {
-      timing,
+      timing: timingScalars(timingFull),
+      timingPerHand,
       correctness,
       dynamics: { L: dynamicsL, R: dynamicsR },
       sync,
@@ -97,7 +114,7 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
     },
   };
 
-  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing };
+  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing: timingFull };
   return run;
 }
 

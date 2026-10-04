@@ -5,6 +5,7 @@ import {
   renderDeviceOptions,
   appendRawLogLine,
   renderSubmetrics,
+  renderPerHandTiming,
   renderNoteStrip,
   renderVelocityChart,
   renderFindings,
@@ -122,6 +123,7 @@ function stopRun() {
 function renderReport(run, history) {
   renderFlags(document.getElementById("report-flags"), run);
   renderSubmetrics(document.getElementById("submetric-bars"), run);
+  renderPerHandTiming(document.getElementById("perhand-timing"), run);
   renderNoteStrip(document.getElementById("note-strip"), run);
   renderVelocityChart(document.getElementById("velocity-chart"), run);
   renderFindings(document.getElementById("findings-list"), generateFindings(run));

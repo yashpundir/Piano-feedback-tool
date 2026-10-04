@@ -3,6 +3,16 @@ import { generateSequence, generateFingering, deriveCrossings } from "../src/sca
 import { analyzeRun } from "../src/run.js";
 import { linreg } from "../src/stats.js";
 import { idealRamp, alignGreedy } from "../src/metrics.js";
+import { generateFindings } from "../src/findings.js";
+import {
+  renderSubmetrics,
+  renderPerHandTiming,
+  renderNoteStrip,
+  renderVelocityChart,
+  renderFindings,
+  renderFlags,
+  renderHistorySparkline,
+} from "../src/ui.js";
 
 // ---------------------------------------------------------------------------
 // Scale generation (§3 / DOCUMENTATION.md §3)
@@ -216,11 +226,130 @@ test("analyzeRun: mismatched hand note-counts flags the run and skips timing/syn
   assert(run.metrics.dynamics.L !== null, "dynamics should still be computed per-hand on a mismatched run");
 });
 
+test("analyzeRun: per-hand timing is computed for both hands on a clean run", () => {
+  const expected = generateSequence(CONFIG);
+  const { events } = buildCleanRunEvents(CONFIG, expected);
+  const run = analyzeRun(CONFIG, events, false);
+  const ph = run.metrics.timingPerHand;
+  assert(ph !== null, "per-hand timing should exist");
+  assertClose(ph.L.jitter, 0, 1e-6, "LH played exactly on time");
+  assertClose(ph.R.jitter, 0, 1e-6, "RH played exactly on time");
+  assertClose(ph.driftDifference, 0, 1e-6, "neither hand drifts relative to the other");
+});
+
+test("analyzeRun: per-hand timing catches one hand slowing relative to the other", () => {
+  // The §7.1 gap this was added to close: LH decelerates while RH holds steady.
+  // Paired timing sees only half the drift and blames hand sync; per-hand timing
+  // names the hand.
+  const expected = generateSequence(CONFIG);
+  const T = 60000 / (CONFIG.bpm * CONFIG.notesPerBeat);
+  const events = [];
+  let lhClock = 0;
+  for (let i = 0; i < expected.N; i++) {
+    const rhOnset = i * T; // steady
+    lhClock += T + i * 1.5; // each LH gap a little longer than the last
+    events.push({ pitch: expected.RH[i], velocity: 64, onset: rhOnset, offset: rhOnset + T * 0.5 });
+    events.push({ pitch: expected.LH[i], velocity: 64, onset: lhClock, offset: lhClock + T * 0.5 });
+  }
+  const run = analyzeRun(CONFIG, events, false);
+  const ph = run.metrics.timingPerHand;
+  assertClose(ph.R.drift, 0, 1e-6, "RH held tempo");
+  assert(ph.L.drift > 0.05, `LH should show positive drift (slowing), got ${ph.L.drift}`);
+  assert(ph.driftDifference > 0.05, "drift difference should flag the left hand");
+});
+
+test("analyzeRun: per-hand timing survives a hand-count mismatch (it needs no pairing)", () => {
+  const expected = generateSequence(CONFIG);
+  const T = 60000 / (CONFIG.bpm * CONFIG.notesPerBeat);
+  const events = [];
+  for (let i = 0; i < expected.N; i++) {
+    const onsetBase = i * T;
+    events.push({ pitch: expected.LH[i], velocity: 60, onset: onsetBase + 3, offset: onsetBase + 3 + T * 0.9 });
+    if (i < expected.N - 3) {
+      events.push({ pitch: expected.RH[i], velocity: 60, onset: onsetBase, offset: onsetBase + T * 0.9 });
+    }
+  }
+  const run = analyzeRun(CONFIG, events, false);
+  assertEqual(run.handMismatch, true);
+  assertEqual(run.metrics.timing, null, "paired timing is skipped");
+  assert(run.metrics.timingPerHand !== null, "per-hand timing should still be available");
+  assert(run.metrics.timingPerHand.L !== null && run.metrics.timingPerHand.R !== null);
+});
+
+test("stored metrics carry timing scalars only, not the IOI/residual arrays (§10 schema)", () => {
+  const expected = generateSequence(CONFIG);
+  const { events } = buildCleanRunEvents(CONFIG, expected);
+  const run = analyzeRun(CONFIG, events, false);
+  assertDeepEqual(Object.keys(run.metrics.timing).sort(), ["drift", "jitter", "offset"]);
+  assert(run._detail.timing.residuals.length > 0, "residuals stay available in _detail for the UI");
+});
+
 test("analyzeRun: sustain pedal flag propagates through to the stored run", () => {
   const expected = generateSequence(CONFIG);
   const { events } = buildCleanRunEvents(CONFIG, expected);
   const run = analyzeRun(CONFIG, events, true);
   assertEqual(run.pedalDetected, true);
+});
+
+// ---------------------------------------------------------------------------
+// Report rendering smoke tests. The pure-function tests above can't catch a typo in
+// DOM code, so each renderer is called once against a real run object and checked for
+// having produced something. Not assertions about layout — just "it runs and emits".
+// ---------------------------------------------------------------------------
+
+test("report renderers: all of them run against a real run object without throwing", () => {
+  const expected = generateSequence(CONFIG);
+  const { events } = buildCleanRunEvents(CONFIG, expected);
+  const run = analyzeRun(CONFIG, events, false);
+
+  const div = () => document.createElement("div");
+  const bars = div();
+  const perhand = div();
+  const strip = div();
+  const findingsEl = document.createElement("ul");
+  const flags = div();
+  const spark = div();
+  const canvas = document.createElement("canvas");
+  canvas.width = 900;
+  canvas.height = 260;
+
+  renderSubmetrics(bars, run);
+  renderPerHandTiming(perhand, run);
+  renderNoteStrip(strip, run);
+  renderVelocityChart(canvas, run);
+  renderFindings(findingsEl, generateFindings(run));
+  renderFlags(flags, run);
+  renderHistorySparkline(spark, [run]);
+
+  assert(bars.childElementCount > 0, "sub-metric bars rendered nothing");
+  assert(perhand.querySelector("table") !== null, "per-hand timing table missing");
+  assert(strip.childElementCount > 0, "note strip rendered nothing");
+  assert(findingsEl.childElementCount > 0, "findings list rendered nothing");
+});
+
+test("report renderers: per-hand panel degrades gracefully when a hand is too short", () => {
+  const perhand = document.createElement("div");
+  renderPerHandTiming(perhand, { metrics: { timingPerHand: null } });
+  assert(perhand.textContent.length > 0, "should explain why it's empty, not render blank");
+});
+
+test("findings: names the hand when one hand loses tempo relative to the other", () => {
+  const findings = generateFindings({
+    metrics: {
+      timing: null,
+      timingPerHand: { L: null, R: null, driftDifference: 0.4 },
+      dynamics: { L: null, R: null },
+      sync: null,
+      crossings: null,
+      legato: null,
+      balance: null,
+      correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },
+    },
+  });
+  assert(
+    findings.some((f) => f.includes("left") && f.includes("losing tempo")),
+    `expected a left-hand tempo finding, got: ${JSON.stringify(findings)}`
+  );
 });
 
 test("analyzeRun: a run with no crescendo (flat velocity) is reported, not crashed", () => {

@@ -71,6 +71,19 @@ export function generateFindings(run) {
     }
   }
 
+  // One hand changing tempo relative to the other. Without this the fault is split
+  // between a halved `drift` and an inflated `sync_error`, and the report never names
+  // the hand responsible.
+  if (m.timingPerHand && m.timingPerHand.driftDifference !== null && Math.abs(m.timingPerHand.driftDifference) > 0.1) {
+    const diff = m.timingPerHand.driftDifference;
+    const slowing = diff > 0 ? "left" : "right";
+    const other = slowing === "left" ? "right" : "left";
+    candidates.push({
+      severity: Math.abs(diff) * 5,
+      text: `Your ${slowing} hand is losing tempo relative to your ${other} hand over the run.`,
+    });
+  }
+
   if (m.balance !== null && Math.abs(m.balance) > 10) {
     const weak = m.balance < 0 ? "left" : "right";
     candidates.push({
