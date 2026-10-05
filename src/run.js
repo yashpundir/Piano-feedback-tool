@@ -97,6 +97,9 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
     runId: uuid(),
     timestamp: Date.now(),
     config: { root, mode, octaves, bpm, notesPerBeat, handInterval, metronome },
+    // Expected note count and peak index. Derivable from config, but stored so that a
+    // consumer of a saved run can interpret reversal indices without re-deriving them.
+    sequence: { N: expected.N, k: expected.k },
     events,
     pedalDetected,
     handMismatch: mismatched,

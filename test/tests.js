@@ -297,6 +297,67 @@ test("analyzeRun: sustain pedal flag propagates through to the stored run", () =
 // having produced something. Not assertions about layout — just "it runs and emits".
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The peak-step sign convention (§7.3). d_i is the step FROM note i TO note i+1, so
+// the step INTO the peak (i = k-1) must expect +1 and the step OUT of it (i = k) must
+// expect -1. These two tests pin that boundary from both sides.
+// ---------------------------------------------------------------------------
+
+test("dynamics: a correct triangle has no reversals at all, including at the peak", () => {
+  const expected = generateSequence(CONFIG);
+  const { events } = buildCleanRunEvents(CONFIG, expected);
+  const run = analyzeRun(CONFIG, events, false);
+  assertDeepEqual(run.metrics.dynamics.R.reversals, [], "an ideal triangle should flag nothing");
+  assertDeepEqual(run.metrics.dynamics.L.reversals, []);
+});
+
+test("dynamics: still rising after the peak flags a reversal exactly at step k", () => {
+  // Velocity keeps climbing past the top note instead of turning around. The step out
+  // of the peak (i = k) is the first one that's wrong, so it must be the one flagged.
+  const expected = generateSequence(CONFIG);
+  const T = 60000 / (CONFIG.bpm * CONFIG.notesPerBeat);
+  const events = [];
+  for (let i = 0; i < expected.N; i++) {
+    const onsetBase = i * T;
+    // monotonically increasing the whole way through - no turnaround
+    const vel = 40 + i * 2;
+    events.push({ pitch: expected.RH[i], velocity: vel, onset: onsetBase, offset: onsetBase + T * 0.9 });
+    events.push({ pitch: expected.LH[i], velocity: vel, onset: onsetBase + 3, offset: onsetBase + 3 + T * 0.9 });
+  }
+  const run = analyzeRun(CONFIG, events, false);
+  const rev = run.metrics.dynamics.R.reversals;
+  assert(rev.includes(expected.k), `step k=${expected.k} should be a reversal, got ${JSON.stringify(rev)}`);
+  assert(!rev.includes(expected.k - 1), "the step INTO the peak was correctly rising and must not be flagged");
+});
+
+test("findings: a dip before the peak and a swell after it are reported as different faults", () => {
+  const base = {
+    sequence: { N: 29, k: 14 },
+    metrics: {
+      timing: null,
+      timingPerHand: null,
+      sync: null,
+      crossings: null,
+      legato: null,
+      balance: null,
+      correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },
+      dynamics: {
+        R: { shape: 0.9, range: 60, reversals: [3, 20], lumpiness: 0.2 },
+        L: null,
+      },
+    },
+  };
+  const findings = generateFindings(base);
+  assert(
+    findings.some((f) => f.includes("crescendo dipped") && f.includes("5")),
+    `step 3 should be reported as a crescendo dip at note 5, got: ${JSON.stringify(findings)}`
+  );
+  assert(
+    findings.some((f) => f.includes("diminuendo") && f.includes("22")),
+    `step 20 should be reported as a diminuendo swell at note 22, got: ${JSON.stringify(findings)}`
+  );
+});
+
 test("report renderers: all of them run against a real run object without throwing", () => {
   const expected = generateSequence(CONFIG);
   const { events } = buildCleanRunEvents(CONFIG, expected);

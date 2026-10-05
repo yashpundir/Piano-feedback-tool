@@ -620,3 +620,188 @@ One incidental fix found while doing it: `metrics.timing` had been persisting it
 claim that intermediate arrays are stripped. Stored metrics now carry scalars only, with
 the arrays confined to the in-memory `_detail` the report renders from — asserted by a
 test.
+
+---
+
+## Batch 3 — 2026-10-05
+
+### 9. What do $M$, $S$, $I$ and $D$ stand for?
+
+**M**atch, **S**ubstitution, **I**nsertion, **D**eletion — the four standard
+edit-distance operations, which is what note correctness is: an alignment problem between
+the scale you were supposed to play and the notes that actually arrived.
+
+The document never spelled this out; it now does, in §7.2.
+
+| Symbol | Name | Musically | Usual cause |
+|---|---|---|---|
+| $M$ | Match | The expected note was played | — |
+| $S$ | Substitution | A wrong note *instead of* the right one | Fingering slip, or not knowing the key signature (F for F♯) |
+| $I$ | Insertion | An extra note that isn't in the scale | Stumble, brushed a neighbouring key, doubled strike |
+| $D$ | Deletion | An expected note never sounded | Missed note — typically a weak 4th or 5th finger not pressing hard enough to trigger |
+
+$$\text{accuracy} = \frac{M}{M + S + I + D}$$
+
+All four are reported separately as well as the ratio, because the remedies differ:
+substitutions mean you have the scale wrong in your head, insertions mean a physical
+accuracy problem, deletions mean finger strength. "You played 93% correctly" hides which
+of the three it was.
+
+---
+
+### 10. What is $u_i$ and how is it calculated?
+
+$u_i$ is the **target loudness of note $i$, on a 0-to-1 scale**, where 0 means the
+player's own softest note and 1 their own loudest. It is intentionally unitless: the app
+never tells you *how* loud to play, only what shape the loudness should trace.
+
+$$u_i = \begin{cases} \dfrac{i}{k} & i \le k \quad \text{(going up)} \\[10pt] \dfrac{N-1-i}{N-1-k} & i > k \quad \text{(coming down)} \end{cases}$$
+
+Reading each branch in words:
+
+- **Ascending**, $i/k$ is simply *what fraction of the way to the peak you are*. The
+  first note gives $0/k = 0$; the peak gives $k/k = 1$.
+- **Descending**, $(N-1-i)$ is *how many notes are left before the end* and $(N-1-k)$ is
+  *how many notes the descent contains altogether*. The ratio therefore slides from just
+  under 1 back down to exactly 0 on the final note.
+
+Both branches are straight lines, so $u$ is a symmetric triangle with its apex at $k$.
+For the default $N = 29$, $k = 14$:
+
+| $i$ | Calculation | $u_i$ | |
+|---|---|---|---|
+| 0 | $0/14$ | 0.000 | start, softest |
+| 7 | $7/14$ | 0.500 | halfway up |
+| 13 | $13/14$ | 0.929 | just below the top |
+| 14 | $14/14$ | **1.000** | the peak |
+| 15 | $(28-15)/14 = 13/14$ | 0.929 | just past the top — mirrors $i=13$ |
+| 21 | $(28-21)/14 = 7/14$ | 0.500 | halfway down — mirrors $i=7$ |
+| 28 | $(28-28)/14$ | 0.000 | end, softest again |
+
+The mirroring ($u_{13} = u_{15}$, $u_7 = u_{21}$) is the "return symmetrically"
+instruction written as arithmetic.
+
+**Where it gets used.** Twice:
+
+1. In `shape`, compared directly against your min-max normalised actual velocities
+   $\tilde{v}_i$ — both are on the same 0-to-1 scale, so the comparison is about shape
+   only and ignores how loud you played.
+2. In §7.5, rescaled back into real velocity units as
+   $\hat{v}_i = \min v + u_i (\max v - \min v)$ — the ideal ramp stretched to fit your
+   own range, which is what thumb-crossing residuals are measured against.
+
+---
+
+### 11. Isn't $s_i = -1$ at $i = k$ wrong?
+
+The formula is correct, but the notation invites exactly this reading, and that's a
+documentation fault rather than your misreading. The fix is in §7.3 now.
+
+**The resolution: $i$ indexes a *step*, not a note.**
+
+$$d_i = v_{i+1} - v_i$$
+
+so $d_i$ is the *move from note $i$ to note $i+1$*. There are $N-1$ of these, numbered 0
+to $N-2$, and $s_i$ is the sign that **move** ought to have. At the peak:
+
+| Step | Is the move | $s_i$ | Correct? |
+|---|---|---|---|
+| $i = k-1$ | note $k-1 \longrightarrow$ note $k$ | $+1$ | ✓ the last *rising* move, climbing **into** the peak |
+| $i = k$ | note $k \longrightarrow$ note $k+1$ | $-1$ | ✓ the first *falling* move, coming **out of** the peak |
+
+So your musical instinct is right — the peak must be louder than the note before it — and
+the formula agrees: that step is $d_{k-1}$, with expected sign $+1$. The $s_k = -1$ you
+spotted governs the step *leaving* the peak, heading down into the diminuendo, which
+should indeed fall.
+
+The peak note itself never gets a sign at all. A note has no direction; only a move
+between two notes does.
+
+Concretely, with the clean-run velocities from the test suite ($v_{13} = 96$,
+$v_{14} = 100$, $v_{15} = 96$):
+
+$$d_{13} = 100 - 96 = +4 \;(\text{matches } s_{13} = +1\ ✓) \qquad d_{14} = 96 - 100 = -4 \;(\text{matches } s_{14} = -1\ ✓)$$
+
+Neither is flagged. Two new tests pin this boundary from both sides: one asserts a
+correct triangle produces **zero** reversals (so $i=k$ is not being falsely flagged), and
+one builds a run whose velocity keeps climbing straight through the peak and asserts the
+reversal lands at exactly $i = k$ and *not* at $i = k-1$.
+
+---
+
+### 12. Why divide lumpiness by $\mu_d$ when it's already divided by $N-1$?
+
+Because the two divisions do completely unrelated jobs — one makes it an average, the
+other makes it relative.
+
+$$\text{lumpiness} = \frac{\overbrace{\dfrac{1}{N-1}\sum_i \big|\,|d_i| - \mu_d\,\big|}^{\text{(a) average deviation of step size}}}{\underbrace{\mu_d}_{\text{(b) typical step size}}}$$
+
+**(a) $\div(N-1)$ turns a sum into a mean.** Without it the figure would grow simply
+because there were more notes to sum over — a 4-octave run would score lumpier than a
+1-octave run for no musical reason at all. This division carries no information about
+evenness; it just removes the dependence on run length.
+
+**(b) $\div\mu_d$ makes the number scale-free.** This is the one doing real work.
+Without it lumpiness would be in velocity units and would scale with how *big* the
+crescendo was:
+
+| Player | Mean step | Typical wobble | (a) alone | lumpiness |
+|---|---|---|---|---|
+| Big crescendo, 60 units | ≈ 4 | ±2 | 2.0 | 0.50 |
+| Small crescendo, 15 units | ≈ 1 | ±0.5 | 0.5 | 0.50 |
+
+Both players are *equally uneven* — each wobbles by half a step — but measure (a) alone
+calls the first one four times worse, purely for playing with a wider dynamic range.
+Dividing by the mean step size makes them read identically, which is correct.
+
+It's the same construction as a **coefficient of variation**: a dispersion measure over a
+central-tendency measure, yielding a dimensionless ratio. $0$ means every step was exactly
+the same size; $0.5$ means a typical step deviated from the average step by half the
+average step.
+
+**There's also a design reason.** The *size* of the crescendo is already scored, by
+`range`. If lumpiness were absolute, a bigger crescendo would automatically look lumpier
+and the two metrics would partly measure the same thing. Keeping lumpiness relative is
+what makes it measure only *unevenness of growth*, independent of amount of growth — the
+same orthogonality discipline as the timing decomposition in §7.1.
+
+---
+
+### 12.1 Do reversals and lumpiness cover the diminuendo too?
+
+Yes, both run over the whole arch — and asking this turned up two genuine bugs in how
+reversals were *reported*. Both now fixed.
+
+**The maths was already symmetric.** $s_i = -1$ for all $i \ge k$, so during the descent
+a step that goes *up* violates the expected sign and is flagged. Lumpiness sums $|d_i|$
+over every step from 0 to $N-2$, so both halves contribute.
+
+**Bug 1 — everything was called a "crescendo dip."** The findings text read
+*"Your crescendo dipped at note …"* for every reversal, including ones in the descending
+half. A swell during the diminuendo is the opposite fault and was being described as its
+opposite. Reversals are now split at $k$ and worded separately:
+
+| Where | Fault | Now reported as |
+|---|---|---|
+| step $i < k$ | fell when it should have risen | "your crescendo dipped at note …" |
+| step $i \ge k$ | rose when it should have fallen | "your diminuendo got louder instead of softer at note …" |
+
+**Bug 2 — an off-by-one in the note number.** `reversals` holds *step* indices, and the
+report was displaying step index $+1$ as the note number. But step $i$ is the move from
+note $i$ to note $i+1$, so the note actually out of line is note $i+1$ (0-based), which a
+player counting from one calls note $i+2$. The displayed number was pointing one note too
+early — at the note *before* the problem. Now corrected, and the convention is documented
+in §7.3 and §10 so anything else reading the field converts the same way.
+
+To support this, the stored run now carries `sequence: { N, k }`. It's derivable from
+`config`, but without it nothing downstream can tell which half of the arch a reversal
+index falls in.
+
+**One limitation worth knowing**, now recorded in §7.3 rather than left to be discovered:
+lumpiness pools both halves into a single $\mu_d$, so an **asymmetric** arch — brisk
+crescendo, leisurely diminuendo — scores as lumpy even when each half is internally
+flawless. That's arguably right, since the exercise does say "return symmetrically," but
+it's conflated with within-half unevenness, so the metric can't distinguish "jerky all
+through" from "smooth but lopsided." Splitting lumpiness per half and adding a symmetry
+ratio $\mu_d^{\text{asc}} / \mu_d^{\text{desc}}$ would separate the two. Happy to add it
+if you want the distinction.

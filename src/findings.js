@@ -36,10 +36,26 @@ export function generateFindings(run) {
     const d = m.dynamics[hand];
     if (!d) continue;
     const label = hand === "L" ? "left" : "right";
-    if (d.reversals.length > 0) {
+
+    // `reversals` holds STEP indices: step i is the move from note i to note i+1, so the
+    // note that is out of line is note i+1 (0-based), displayed 1-based as i+2.
+    // Steps before the peak are crescendo dips; steps at or after it are diminuendo
+    // swells — opposite faults, so they can't share one sentence.
+    const k = run.sequence?.k;
+    const noteLabel = (steps) => steps.map((i) => i + 2).join(", ");
+    const dips = k === undefined ? d.reversals : d.reversals.filter((i) => i < k);
+    const swells = k === undefined ? [] : d.reversals.filter((i) => i >= k);
+
+    if (dips.length > 0) {
       candidates.push({
-        severity: d.reversals.length,
-        text: `Your ${label}-hand crescendo dipped at note${d.reversals.length > 1 ? "s" : ""} ${d.reversals.map((i) => i + 1).join(", ")}.`,
+        severity: dips.length,
+        text: `Your ${label}-hand crescendo dipped at note${dips.length > 1 ? "s" : ""} ${noteLabel(dips)}.`,
+      });
+    }
+    if (swells.length > 0) {
+      candidates.push({
+        severity: swells.length,
+        text: `Your ${label}-hand diminuendo got louder instead of softer at note${swells.length > 1 ? "s" : ""} ${noteLabel(swells)}.`,
       });
     }
     if (d.range < 30) {

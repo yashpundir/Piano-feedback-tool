@@ -583,6 +583,26 @@ hand-count-mismatched run.
 The played pitch sequence $P$ is aligned against the expected sequence $E$ by **edit
 distance**, per hand.
 
+#### The four counts
+
+Every event in the alignment is classified into exactly one of four categories, named
+after the standard edit-distance operations:
+
+| Symbol | Name | What it means musically |
+|---|---|---|
+| $M$ | **M**atch | The expected note was played. The only one you want. |
+| $S$ | **S**ubstitution | A note was played *instead of* the expected one — a wrong note. Usually a fingering slip or a key-signature mistake (F instead of F♯). |
+| $I$ | **I**nsertion | An extra note was played that isn't in the scale at all — a stumble, a brushed neighbouring key, or a doubled strike. |
+| $D$ | **D**eletion | An expected note never sounded — a missed note, usually a weak 4th or 5th finger not pressing hard enough to trigger. |
+
+The distinction matters because the three faults have different causes and different
+remedies: substitutions point at knowing the scale wrong, insertions at physical
+accuracy, deletions at finger strength. A single accuracy percentage would collapse all
+three into "you played 93% of it right," which tells the player nothing about what to
+practise.
+
+$$\text{accuracy} = \frac{M}{M + S + I + D}$$
+
 > **Do not compare index by index.** One inserted note desynchronises everything after
 > it and reports a near-zero score for a nearly-correct run — the single most damaging
 > possible bug in this class of tool, because it punishes the player hardest exactly
@@ -601,12 +621,8 @@ ahead to decide which of three things happened:
 Any remaining expected notes at the end count as deletions; any remaining played notes
 count as insertions.
 
-$$\text{accuracy} = \frac{M}{M + S + I + D}$$
-
-$M$, $S$, $I$ and $D$ are reported **separately as well as** the ratio, because they mean
-different things pedagogically: substitutions are wrong notes (a fingering or
-key-signature problem), insertions are extra notes (usually a stumble or a doubled
-strike), and deletions are missed notes (usually a weak fourth or fifth finger).
+$M$, $S$, $I$ and $D$ are reported **separately as well as** the ratio, for the reasons
+in the table above.
 
 Each hand is aligned against its own expected sequence, then the four counts are summed
 across hands for the headline number.
@@ -634,7 +650,36 @@ Normalised target, rising linearly to 1 at the top note and falling symmetricall
 
 $$u_i = \begin{cases} \dfrac{i}{k} & i \le k \\[10pt] \dfrac{N - 1 - i}{N - 1 - k} & i > k \end{cases}$$
 
-with $u_i \in [0, 1]$.
+$u_i$ is the **target loudness of note $i$ on a 0-to-1 scale**, where 0 is the player's
+softest note and 1 their loudest. It is deliberately unitless rather than in MIDI
+velocity: the app does not prescribe *how* loud to play, only the shape the loudness
+should trace. Reading the two branches:
+
+- **Going up** ($i \le k$): $i/k$ counts what fraction of the way to the peak you are.
+  At the first note $u_0 = 0/k = 0$; at the peak $u_k = k/k = 1$.
+- **Coming down** ($i > k$): $(N-1-i)$ counts how many notes remain before the end, and
+  $(N-1-k)$ is how many notes the descent contains in total — so the ratio falls from
+  just under 1 back to 0 at the final note.
+
+Both branches are straight lines, so $u$ traces a symmetric triangle peaking at $k$.
+Worked values for the default $N = 29$, $k = 14$:
+
+| $i$ | Branch | $u_i$ | Meaning |
+|---|---|---|---|
+| 0 | $0/14$ | 0.000 | softest note, start of the crescendo |
+| 7 | $7/14$ | 0.500 | halfway up |
+| 13 | $13/14$ | 0.929 | one note below the top |
+| 14 | $14/14$ | **1.000** | the peak — loudest note |
+| 15 | $(28-15)/14 = 13/14$ | 0.929 | first note of the descent, mirroring $i=13$ |
+| 21 | $(28-21)/14 = 7/14$ | 0.500 | halfway down, mirroring $i=7$ |
+| 28 | $(28-28)/14 = 0/14$ | 0.000 | softest again, end of the diminuendo |
+
+Note the symmetry: $u_{13} = u_{15}$ and $u_7 = u_{21}$. That is the "return
+symmetrically" instruction expressed numerically.
+
+$u$ is used in two places: directly in `shape` below (compared against min-max
+normalised actual velocities), and rescaled back into velocity units as
+$\hat{v}_i = \min v + u_i(\max v - \min v)$ for the crossing residuals in §7.5.
 
 #### Shape fidelity — scale-invariant
 
@@ -665,27 +710,85 @@ is a note index the player can act on.
 $$d_i = v_{i+1} - v_i \qquad
 s_i = \begin{cases} +1 & i < k \\ -1 & i \ge k \end{cases}$$
 
-$s_i$ is the sign the step *should* have: rising before the peak, falling after.
+> **$i$ here indexes a step, not a note.** $d_i$ is the move *from* note $i$ *to* note
+> $i+1$, so there are $N-1$ of them, numbered $0$ to $N-2$. $s_i$ is the sign that move
+> should have. This is worth stating explicitly because the boundary at $i = k$ reads as
+> an error otherwise:
+>
+> | Step | Is the move | Expected | Why |
+> |---|---|---|---|
+> | $i = k-1$ | note $k-1 \to$ note $k$ | $s_{k-1} = +1$ | the last rising move, climbing *into* the peak |
+> | $i = k$ | note $k \to$ note $k+1$ | $s_k = -1$ | the first falling move, coming *out of* the peak |
+>
+> So the peak note is still approached by a rising step, as it must be — $s_k = -1$
+> describes the step that *leaves* the peak, not the one that reaches it. The peak itself
+> is never assigned a sign, because a note doesn't have a direction; only a move between
+> two notes does.
 
 $$\boxed{\ \text{reversals} = \left\{\, i : \operatorname{sign}(d_i) \neq s_i \,\right\} \ }$$
 
-The **indices are recorded, not just the count** — that set is what becomes "your
-crescendo dipped at notes 4 and 9." Note that a flat step ($d_i = 0$) counts as a
-reversal, since $\operatorname{sign}(0) = 0$ matches neither $+1$ nor $-1$; a plateau in
-a passage that should be continuously growing is a genuine deviation.
+The **step indices are recorded, not just the count** — that set is what becomes a
+note-level finding. When reporting to the player, a reversal at step $i$ means the note
+that is out of line is note $i+1$ (0-based), displayed as note $i+2$ in the 1-based
+numbering a player counts in.
+
+A flat step ($d_i = 0$) counts as a reversal, since $\operatorname{sign}(0) = 0$ matches
+neither $+1$ nor $-1$; a plateau in a passage that should be continuously growing is a
+genuine deviation.
+
+#### Both halves of the arch are covered
+
+`reversals` and `lumpiness` apply across the whole run, not just the crescendo:
+
+| Where | A reversal means | Reported as |
+|---|---|---|
+| $i < k$ (crescendo) | the step fell when it should have risen | "your crescendo dipped at note …" |
+| $i \ge k$ (diminuendo) | the step rose when it should have fallen | "your diminuendo got louder instead of softer at note …" |
+
+These are opposite faults and are worded separately in §9 — a swell during the
+diminuendo is not a "dip," and calling it one would send the player looking for the wrong
+thing.
+
+#### Lumpiness and its two divisions
 
 $$\mu_d = \frac{1}{N-1}\sum_i |d_i|
 \qquad
-\boxed{\ \text{lumpiness} = \frac{\dfrac{1}{N-1}\displaystyle\sum_i \Big| \,|d_i| - \mu_d\, \Big|}{\mu_d} \ }$$
+\boxed{\ \text{lumpiness} = \frac{\overbrace{\dfrac{1}{N-1}\displaystyle\sum_i \Big| \,|d_i| - \mu_d\, \Big|}^{\text{(a) mean absolute deviation of step size}}}{\underbrace{\mu_d}_{\text{(b) mean step size}}} \ }$$
 
-Lumpiness is the mean absolute deviation of the step sizes, normalised by the mean step
-size — a relative measure of how uneven the growth was.
+The two divisions do unrelated jobs, and both are needed:
+
+- **(a) $\div (N-1)$ makes it an average.** It turns a sum into a per-step mean so the
+  figure doesn't simply grow with the length of the run — otherwise a 4-octave scale
+  would score as lumpier than a 1-octave scale purely for having more notes.
+- **(b) $\div \mu_d$ makes it relative.** Without it, lumpiness would be in velocity
+  units and would scale with the *size* of the crescendo. A player growing 60 units in
+  steps of about 4 with ±2 wobble, and a player growing 15 units in steps of about 1
+  with ±0.5 wobble, are equally uneven — but the first one's absolute deviation is four
+  times larger. Dividing by the mean step makes both read the same.
+
+This is the same construction as a coefficient of variation: a measure of spread divided
+by a measure of central tendency, giving a dimensionless ratio. $\text{lumpiness} = 0$
+means every step was exactly the same size; $0.5$ means a typical step differed from the
+average step by half the average step.
+
+Keeping it relative is also what stops it **double-counting with `range`**. Size of
+crescendo is already scored by `range`; if lumpiness were absolute, a bigger crescendo
+would automatically look lumpier and the two metrics would partly measure the same
+thing. The same separation-of-concerns logic as the timing decomposition in §7.1.
 
 **`reversals` catches dips** — the crescendo went backwards. **`lumpiness` catches
 uneven step sizes** — the crescendo happened in jumps rather than smoothly. These are
 different faults and neither implies the other: a player can crescendo monotonically in
 three lurches (no reversals, high lumpiness) or grow in perfectly even steps with one
 dip (one reversal, low lumpiness).
+
+> **Known limitation.** Lumpiness pools the steps of both halves into a single $\mu_d$,
+> so an *asymmetric* arch — a fast crescendo and a gradual diminuendo — registers as
+> lumpy even when each half is internally perfectly smooth. Arguably that is correct,
+> since the exercise does instruct a symmetric return; but it is conflated with
+> within-half unevenness, so the metric cannot distinguish "jerky throughout" from
+> "smooth but lopsided." Computing lumpiness per half, plus a separate symmetry ratio
+> $\mu_d^{\text{asc}} / \mu_d^{\text{desc}}$, would separate them. Not yet implemented.
 
 All dynamics metrics are computed **per hand**.
 
@@ -897,7 +1000,8 @@ Each candidate finding carries a severity, and the three highest survive:
 |---|---|---|
 | Hand sync lead | $\lvert\text{bias}\rvert > 5$ ms | $\lvert\text{bias}\rvert / 5$ |
 | Thumb crossings (per hand) | $\lvert\text{bump}_v\rvert > 5$ or $\lvert\text{bump}_t\rvert > 10$ | $\max(\lvert\text{bump}_v\rvert/5,\ \lvert\text{bump}_t\rvert/10)$ |
-| Crescendo dips | any reversal | count of reversals |
+| Crescendo dips | any reversal at step $i < k$ | count of those reversals |
+| Diminuendo swells | any reversal at step $i \ge k$ | count of those reversals |
 | Narrow dynamic range | $\text{range} < 30$ | $(30 - \text{range})/10$ |
 | Wrong tempo | $\lvert\text{offset}\rvert > 0.05$ | $\lvert\text{offset}\rvert \times 10$ |
 | Tempo drift | $\lvert\text{drift}\rvert > 0.1$ | $\lvert\text{drift}\rvert \times 5$ |
@@ -932,6 +1036,7 @@ these objects):
 {
   "runId": "uuid",
   "timestamp": 1730000000000,
+  "sequence": { "N": 29, "k": 14 },
   "config": {
     "root": "C", "mode": "major", "octaves": 2,
     "bpm": 80, "notesPerBeat": 2,
@@ -970,6 +1075,13 @@ Notes on the shape:
 
 - `events` retains every raw note, so any metric can be recomputed later from stored
   runs without asking the player to play again. This matters for v2 calibration.
+- `sequence` carries the expected note count and peak index. Both are derivable from
+  `config`, but storing them lets a consumer interpret `reversals` without re-deriving
+  the scale.
+- **`reversals` holds step indices, not note indices** (§7.3). A value of 4 means the
+  step from note 4 to note 5 went the wrong way, so the note out of line is note 5
+  0-based — note 6 as a player would count it. The findings layer does that conversion;
+  anything else reading this field must do it too.
 - `crossings` is split per hand, because the two hands cross at different indices.
 - Intermediate arrays used only to draw the current report (per-note residuals, the
   ideal velocity curve, the paired stream) are **stripped before persisting** —
