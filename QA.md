@@ -805,3 +805,158 @@ it's conflated with within-half unevenness, so the metric can't distinguish "jer
 through" from "smooth but lopsided." Splitting lumpiness per half and adding a symmetry
 ratio $\mu_d^{\text{asc}} / \mu_d^{\text{desc}}$ would separate the two. Happy to add it
 if you want the distinction.
+
+---
+
+## Batch 4 — 2026-10-05
+
+### 13. Why a contrast for $\text{bump}_v$ instead of just reporting $\mathrm{vres}_i$ for each crossing?
+
+Because a raw residual **cannot distinguish a thumb problem from a whole-run shape
+problem**, and those need opposite advice.
+
+The ideal ramp $\hat{v}_i = \min v + u_i(\max v - \min v)$ is pinned to the player's own
+min and max, but only at the two endpoints. Everything between is free to deviate, and in
+general
+
+$$\sum_i \mathrm{vres}_i \neq 0$$
+
+So a player whose crescendo bulges above the straight line has *every* mid-run note
+sitting high — crossings and non-crossings alike. Three cases, with the same crossing
+residual arising from different causes:
+
+| Player | $\mathrm{vres}$ at crossings | $\mathrm{vres}$ elsewhere | Raw reading | $\text{bump}_v$ |
+|---|---|---|---|---|
+| Convex crescendo, thumb is fine | +6 | +6 | "crossings 6 units loud" ✗ | **0** ✓ |
+| Straight crescendo, heavy thumb | +9 | 0 | "crossings 9 units loud" ✓ | **+9** ✓ |
+| Convex crescendo **and** heavy thumb | +15 | +6 | "crossings 15 units loud" ✗ | **+9** ✓ |
+
+In row 1 the thumb is blameless — the fault is the crescendo's shape, which `shape`
+already scores. A raw residual would invent a thumb problem and send the player off
+practising the wrong thing. In row 3 it would overstate a real one, because the bulge and
+the thumb are added together.
+
+Subtracting the non-crossing mean removes whatever is **common to every note**, leaving
+only what is specific to crossings. Two ways to say the same thing:
+
+- Statistically, it's a difference-in-means contrast: common-mode error cancels.
+- By design, it's the same orthogonality discipline as §7.1 — the shape fault belongs to
+  `shape`, so `bump` must not re-charge the player for it.
+
+**The second reason is noise.** Velocity varies by several units note to note from motor
+noise alone, so a single crossing's residual is one noisy sample. The claim the report
+actually wants to make is explicitly about a group — "crossings are *systematically*
+worse" — and a group claim needs aggregation to stand up. One loud thumb note is not
+evidence of a thumb habit.
+
+#### But you're right that something is lost
+
+The aggregate discards information that would be genuinely useful, and it isn't currently
+kept anywhere:
+
+- **Which crossing was worst.** Players don't fix "crossings" in general; they fix the
+  crossing at F.
+- **Ascending vs descending.** Thumb passing *under* (ascending) and third finger
+  crossing *over* (descending) are different physical motions and plausibly fail
+  differently. Pooling them into one mean hides that completely.
+
+This is a real gap, not just theory: §6's own example output — *"Most consistent at F
+ascending"* — **cannot be produced by the current implementation**, because the
+per-crossing values never survive the averaging. I'd listed the symptom in §13 before
+without having traced it to this cause.
+
+The fix is additive rather than a redesign: keep the per-crossing $(i, \mathrm{vres}_i,
+\mathrm{tres}_i)$ triples alongside the contrast, and split the means by direction
+($i < k$ vs $i \ge k$). The headline stays the contrast, for the reasons above; the
+detail becomes available for the prose. Happy to implement if you want it.
+
+---
+
+### 14. Legato: the $T$ division, the sign, the magnitudes, and the variance
+
+#### (a) Why divide by $T$
+
+Same logic as §7.1: a gap is only meaningful relative to how much room a note has. 30 ms
+of silence is a fifth of the note's space at a brisk tempo and three per cent of it at a
+slow one — the identical millisecond value describes choppy playing in one case and
+seamless playing in the other. Dividing by $T$ turns it into a fraction of the
+note-to-note interval, so one number means one musical thing at any tempo, and runs at
+different tempos remain comparable in the stored history.
+
+#### (b) Your reading of the sign is right
+
+Positive = **detached on balance**, negative = **overlapped on balance**. Mechanically:
+$g_i = t_{i+1} - o_i$ is next-onset minus current-release, so a positive value means you
+let go before striking the next note (silence between them) and a negative value means
+the next note began while the previous was still held (overlap).
+
+One refinement to "one or the other is dominant", though — see (d). Because it's a
+**mean**, the two faults can cancel rather than one dominating. A run that overlaps
+through the first octave and chops through the second can average to $\approx 0$ and look
+like textbook legato. So the mean reports a *net tendency*, which is not the same as
+saying one tendency prevailed.
+
+#### (c) It is not a tiny number — the premise is the thing to check
+
+The intuition that $g_i$ is "already very small" is where this goes astray. $g_i$ is
+small in absolute terms (tens of milliseconds), but $T$ is also only a few hundred
+milliseconds, so the ratio lands in a comfortable range. The reason is structural: in a
+scale you hold each note roughly until the next one, so note duration is naturally on the
+order of $T$, and $\tilde{g}$ ends up being *the fraction of a beat by which your release
+was early or late*.
+
+At 80 BPM in eighths ($T = 375$ ms):
+
+| You hold each note for | $g_i$ | $\tilde{g}_i$ | Sounds like |
+|---|---|---|---|
+| $1.20\,T$ | −75 ms | **−0.20** | mushy, notes piling up |
+| $1.05\,T$ | −19 ms | **−0.05** | smooth, just-connected — real pianistic legato |
+| $1.00\,T$ | 0 ms | **0.00** | exact legato, the nominal target |
+| $0.95\,T$ | +19 ms | **+0.05** | barely detached, still reads as legato |
+| $0.90\,T$ | +38 ms | **+0.10** | audibly detached |
+| $0.80\,T$ | +75 ms | **+0.20** | clearly choppy |
+
+So the working range is roughly $\pm 0.3$ — which is exactly why §9's thresholds sit at
+$+0.3$ and $-0.2$ and §8's bar divides by 0.5. (The synthetic clean run in the test suite
+holds each note for $0.9\,T$ and the suite asserts `articulation` $= 0.100$, matching the
+table.)
+
+#### (d) How to read `articulation_var`
+
+It's the standard deviation of $\tilde{g}_i$ — the **consistency** of your touch, in the
+same "fraction of a beat" units as the mean, so you can compare the two directly.
+
+The pair reads as a 2×2, and the second row is the one that matters:
+
+| mean | var | Diagnosis |
+|---|---|---|
+| $\approx 0$ | low | True, consistent legato — the goal |
+| $\approx 0$ | **high** | **Overlaps and gaps cancelling out.** Looks flawless by the mean alone — the case the mean structurally cannot see |
+| $+0.2$ | low | Uniformly detached. Not the exercise's goal, but *controlled* — a deliberate touch |
+| $+0.2$ | high | Detached **and** erratic |
+
+Rule of thumb: **if `var` is bigger than $|\text{mean}|$, your inconsistency outweighs
+your tendency.** The thing to practise is evenness of release, not whether to play more or
+less connected.
+
+Caveats: like `jitter` it's a standard deviation, so one note held oddly long dominates
+it. And $g_i$ depends on note-**off** timestamps, which are less precise than note-on —
+key-release sensing varies by instrument. Sustain pedal invalidates the metric outright,
+which is why §7.8 flags pedalled runs instead of pretending their legato numbers mean
+something.
+
+#### The uncomfortable part of this answer
+
+Asking "how do I read that number?" exposed that **right now, you can't — nothing shows
+it.** `varL`/`varR` are computed, persisted in every saved run, and documented in §7.6,
+but no bar, no strip row and no finding reads them. I checked: outside of `run.js`
+assembling them into the metrics object, nothing in `src/` touches those fields.
+
+Which means the single articulation fault the signed mean *provably cannot detect* —
+cancelling overlaps and gaps, row 2 above — is the one fault the player is never told
+about. That's the worst possible thing to have left unwired, and it's now recorded in
+§13.
+
+Fixing it is small: a legato consistency finding (fires when `var` exceeds, say, 0.15 or
+exceeds $|\text{mean}|$), and either a second bar or a value shown alongside the existing
+legato bar. Want me to wire it up?

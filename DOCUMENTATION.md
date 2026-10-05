@@ -847,6 +847,45 @@ $$\boxed{\ \text{bump}_v = \frac{1}{|C|}\sum_{i \in C} \mathrm{vres}_i \;-\; \fr
 
 $$\boxed{\ \text{bump}_t = \frac{1}{|C|}\sum_{i \in C} \mathrm{tres}_i \;-\; \frac{1}{|\bar{C}|}\sum_{i \notin C} \mathrm{tres}_i \ } \qquad [\text{ms}]$$
 
+#### Why a contrast rather than the raw crossing residuals
+
+The obvious alternative is to report $\mathrm{vres}_i$ for each $i \in C$ directly and
+skip the subtraction. The contrast is used instead because **a raw residual cannot tell a
+thumb problem apart from a whole-run shape problem.**
+
+The ideal ramp $\hat{v}$ is anchored to the player's own min and max, but only at the
+endpoints — the middle is free to deviate, and $\sum_i \mathrm{vres}_i \ne 0$ in general.
+So a player whose crescendo bulges above the straight ramp has *every* mid-run note
+sitting high:
+
+| Player | Crossing $\mathrm{vres}$ | Non-crossing $\mathrm{vres}$ | Raw reading | $\text{bump}_v$ |
+|---|---|---|---|---|
+| Convex crescendo, thumb fine | +6 | +6 | "crossings are 6 units loud" ✗ | **0** ✓ |
+| Straight crescendo, heavy thumb | +9 | 0 | "crossings are 9 units loud" ✓ | **+9** ✓ |
+| Convex crescendo *and* heavy thumb | +15 | +6 | "crossings are 15 units loud" ✗ | **+9** ✓ |
+
+In the first case the thumb is not the fault at all — the crescendo shape is, and `shape`
+already scores exactly that. Reporting the raw residual would diagnose a thumb problem
+that doesn't exist, and in the third case would overstate a real one. Subtracting the
+non-crossing mean removes whatever error is **common to all notes**, leaving only the
+component specific to crossings. It is a difference-in-means contrast, and it keeps this
+metric from double-counting with `shape` — the same orthogonality discipline as §7.1.
+
+The second reason is statistical. Note-to-note velocity varies by several units from
+motor noise alone, so one crossing's residual is a single noisy sample. The finding being
+made is explicitly a claim about a *group* — "crossings are **systematically** worse" —
+and that claim requires aggregation to support it.
+
+> **What the aggregate throws away.** Per-crossing residuals are genuinely useful and are
+> not currently retained: which crossing was worst, and whether ascending crossings
+> (thumb passing *under*) differ from descending ones (finger crossing *over*), which are
+> different physical motions and plausibly differ systematically. §6's own example prose
+> — "most consistent at F ascending" — cannot actually be produced by the current
+> implementation for this reason. The per-note strip does show each note's dynamics
+> residual, so the information is on screen; it just isn't labelled as a crossing or
+> summarised. Retaining the per-crossing values alongside the contrast would fix both.
+> See §13.
+
 #### Reporting rules
 
 Reported **only** when $|\text{bump}_v| > 5$ velocity units or $|\text{bump}_t| > 10$ ms.
@@ -878,13 +917,79 @@ $$g_i = t_{i+1} - o_i \qquad [\text{ms}]
 | $\tilde{g}_i \approx 0$ | Legato — the target for scale practice |
 | $\tilde{g}_i > 0$ | Detached, choppy |
 
+#### Why divide by $T$ here too
+
+Same reason as §7.1: a gap only means something relative to how long a note has. 30 ms of
+silence is a fifth of the note's space at a fast tempo and three per cent of it at a slow
+one — the same millisecond figure describes choppy playing in one case and seamless
+playing in the other. Dividing by $T$ expresses the gap as a fraction of the note-to-note
+interval, so one number means one musical thing at every tempo, and runs at different
+tempos stay comparable in the history.
+
+**This does not make the number small.** A scale note's duration is naturally on the
+order of $T$ itself, so $\tilde{g}$ is the *fraction of a beat* by which the release was
+early or late — a comfortable 0 to ±0.3, not a vanishing quantity. At 80 BPM in eighths
+($T = 375$ ms):
+
+| You hold each note for | $g_i$ | $\tilde{g}_i$ | Sounds |
+|---|---|---|---|
+| $1.20\,T$ | −75 ms | **−0.20** | mushy, notes piling onto each other |
+| $1.05\,T$ | −19 ms | **−0.05** | smooth, just-connected — pianistic legato |
+| $1.00\,T$ | 0 ms | **0.00** | exact legato, the nominal target |
+| $0.95\,T$ | +19 ms | **+0.05** | barely detached, still reads as legato |
+| $0.90\,T$ | +38 ms | **+0.10** | audibly detached |
+| $0.80\,T$ | +75 ms | **+0.20** | clearly choppy |
+
+Which is why the §9 thresholds sit at $+0.3$ (detached) and $-0.2$ (overlapping), and the
+§8 bar divides by 0.5: the working range is about $\pm 0.3$.
+
 $$\boxed{\ \text{articulation} = \frac{1}{N-1}\sum_i \tilde{g}_i \ } \qquad \text{signed}$$
 
 $$\boxed{\ \text{articulation\_var} = \sqrt{\frac{1}{N-1}\sum_i \left(\tilde{g}_i - \overline{\tilde{g}}\right)^2} \ }$$
 
-The variance matters independently of the mean: a player who is uniformly slightly
-detached has a different problem from one who is legato in some places and choppy in
-others.
+#### Reading the mean — and what it hides
+
+`articulation` is signed, so positive means the run was **detached on balance** and
+negative means it was **overlapped on balance**. But "on balance" is doing real work
+there: it is a mean, so **opposite faults cancel.** A player who overlaps badly through
+the first octave and chops through the second can average out to $\approx 0$ and appear
+to have textbook legato.
+
+That is precisely why `articulation_var` exists, and why the mean must never be read
+alone.
+
+#### Reading the variance
+
+`articulation_var` is the standard deviation of $\tilde{g}$ — the **consistency** of
+touch, in the same "fraction of a beat" units as the mean, so the two are directly
+comparable. The pair is read as a 2×2:
+
+| mean | var | Diagnosis |
+|---|---|---|
+| $\approx 0$ | low | True, consistent legato — the target |
+| $\approx 0$ | **high** | **Overlaps and gaps cancelling out.** Looks perfect by the mean alone; this is the case the mean cannot see |
+| $+0.2$ | low | Uniformly detached — a consistent, deliberate-sounding touch. Not the exercise's goal, but controlled |
+| $+0.2$ | high | Detached *and* erratic |
+
+A useful rule of thumb: **if `var` exceeds $|\text{mean}|$, inconsistency is the bigger
+problem than touch** — the fault to practise is evenness of release, not whether to play
+more or less connected.
+
+Being a standard deviation, it is outlier-sensitive in the same way as `jitter` (§7.1):
+one note held oddly long will dominate it.
+
+> **Currently not surfaced.** `varL`/`varR` are computed, stored in every run, and
+> documented here, but no part of the report reads them — there is no bar, no strip row
+> and no finding for inconsistent articulation. The one case the mean provably cannot
+> detect is therefore the one case the player is never told about. See §13.
+
+#### A caveat on the input data
+
+$g_i$ depends on note-**off** timestamps, which are less reliable than note-on: key-release
+sensing varies between instruments and is generally less precise than strike sensing. And
+sustain pedal use invalidates the metric completely, since the damper stays up after the
+key returns — which is why §7.8 flags pedalled runs rather than reporting their legato as
+if it meant something.
 
 Computed per hand.
 
@@ -1186,7 +1291,8 @@ metric is `null` and every unreliable run carries a visible flag.
 | **Metronome is inert** | The checkbox exists and its value is captured into the run config and persisted, but no audible click is generated — there is no Web Audio code in the project. Either implement it or remove the control; a switch that does nothing is worse than no switch. |
 | Strip does not wrap | Beyond ~4 octaves the strip scrolls horizontally rather than wrapping to a second line. |
 | Crossing findings are per-run | The finding is meant to be that crossings are *systematically* worse; aggregating across runs would make it far more reliable than a single run can. |
-| No "most consistent at F ascending" detail | Crossing prose reports the average bump but does not yet name which crossing was worst. |
+| **`articulation_var` is computed but never shown** | `varL`/`varR` are calculated and persisted in every run, but no bar, strip row or finding reads them. The one articulation fault the signed mean provably cannot detect — overlaps and gaps cancelling to ≈0 (§7.6) — is therefore never reported. Either surface it or stop computing it. |
+| Per-crossing residuals not retained | §7.5 reports only the aggregate contrast, so "which crossing was worst" and "do ascending crossings differ from descending ones" can't be answered — including §6's own example prose, "most consistent at F ascending", which the implementation cannot currently produce. |
 | Sparkline shows jitter only | Any stored metric could be trended; jitter was chosen as the single most diagnostic. |
 | Not tested on hardware | See [§16](#16-testing). |
 
