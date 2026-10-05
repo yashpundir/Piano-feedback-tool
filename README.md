@@ -1,88 +1,90 @@
 # Scale Practice Feedback
 
-Browser MIDI scale-practice scorer. Plain HTML/CSS/JS, ES modules, no build step,
-no dependencies — matches the spec's "zero install, static site" requirement.
+A browser tool that listens to a digital piano over MIDI, scores a two-hand scale
+exercise, and tells you **where** in the run each fault happened — note by note.
+
+No install, no account, no backend. Plain HTML/CSS/JS with ES modules and zero
+dependencies; it serves as-is from any static host.
+
+## Why
+
+Three things go wrong in scale practice that you cannot hear from the bench:
+
+- **Hand synchronisation.** A consistent 10–15 ms lag between the hands is inaudible as a
+  discrete event, but it is exactly what makes a scale sound smeared rather than clean.
+- **Thumb-crossing accents.** The thumb is heavier than the other fingers, so crossings
+  land louder and later. Because the crescendo is *supposed* to be rising, a loud thumb
+  note sounds plausible and passes unnoticed.
+- **Dynamic shape.** "Start soft, grow to the top, come back symmetrically" is easy to say
+  and hard to verify. Players routinely believe they played a smooth crescendo when they
+  played three jumps and a dip.
+
+MIDI reports every onset, release and key velocity to the millisecond, so all three are
+directly measurable even though none are audible.
+
+## What you need
+
+- A digital piano connected by USB
+- **Chrome, Edge or Opera.** Safari has never shipped Web MIDI; iOS and iPadOS are
+  unsupported in every browser, since they all use WebKit underneath. Firefox works with
+  the site-permission add-on.
 
 ## Run it locally
 
-Web MIDI requires a secure context, but `localhost` is exempt from the HTTPS
-requirement, so any static file server works. This machine has no Node or
-working Python, so pick whichever of these you have:
+Web MIDI needs a secure context, but `localhost` is exempt from the HTTPS requirement, so
+any static file server works:
 
 ```bash
-# Ruby (present on stock macOS)
-ruby -run -e httpd . -p 8000
-
-# Node, if you install it
-npx serve .
-
-# Python, if you install it
-python3 -m http.server 8000
+ruby -run -e httpd . -p 8000     # ships with macOS
+npx serve .                      # if you have Node
+python3 -m http.server 8000      # if you have Python
 ```
 
-Then open `http://localhost:8000` in Chrome.
+- App: <http://localhost:8000>
+- Tests: <http://localhost:8000/test/>
 
 ## Deploy
 
-Push this directory to a GitHub repo and enable GitHub Pages (or drag the
-folder into Netlify). No build step — it serves as-is.
+Push to a GitHub repo and enable GitHub Pages, or drag the folder into Netlify. There is
+no build step and nothing to configure. HTTPS is the only hard requirement — Web MIDI
+refuses to run without it.
 
-## What's implemented
+## Status
 
-All of §1–§4 and §6–§7, and all of build order phases 1–4 plus most of phase 5:
+Working today: MIDI capture and device picking, C major in 1–4 octaves, and the full
+metric set — timing (tempo offset, drift, jitter, per hand and combined), note accuracy
+by edit-distance alignment, dynamics (shape, range, reversals, lumpiness), hand
+synchronisation, thumb-crossing accents, legato, hand balance and sustain-pedal
+detection. The report gives sub-metric bars, a per-note strip, a velocity chart against
+the ideal shape, prioritised plain-English findings, and `localStorage` history with JSON
+export.
 
-- MIDI connection, device picker, live raw event log (`src/midi.js`, run screen)
-- Expected-sequence generation for C major, 1–4 octaves (`src/scale.js`)
-- Hand separation — see note below (`src/metrics.js`)
-- All §4 metrics: timing decomposition, note correctness (greedy aligner),
-  dynamics shape/range/reversals/lumpiness, hand sync, thumb-crossing bumps,
-  legato, hand balance, pedal detection (`src/metrics.js`, `src/run.js`)
-- Report UI: sub-metric bars, per-note strip, velocity chart with ideal
-  overlay, prioritised plain-English findings (`src/ui.js`, `src/findings.js`)
-- `localStorage` history, JSON export, jitter sparkline (`src/storage.js`)
+Deliberately **not** built yet: scales other than C major, Needleman–Wunsch alignment,
+and a calibrated 0–100 composite score. The last one is blocked on data, not code —
+converting metrics in different units onto one scale needs anchor points, and those are a
+judgement about what counts as good playing that needs real runs from real players.
 
-Deliberately not implemented, per spec: other scales/modes, calibrated
-composite score, Needleman–Wunsch alignment — all explicitly marked v2,
-and the composite score explicitly needs real player data to calibrate
-before it can mean anything.
+Honest caveats, with more in `DOCUMENTATION.md` §13 and §15:
 
-## One deviation from the spec worth flagging
+- The metrics' colour thresholds are informed guesses, not calibrated against real players.
+- Hand separation by onset clustering has not been validated against a player whose hands
+  are badly out of sync — the case it is most likely to get wrong.
+- The metronome setting exists in the UI but produces no sound yet.
 
-§3 specifies hand separation by a single fixed pitch threshold (midpoint
-between the lowest expected LH and RH note). §9.1 flags this as unverified
-and asks to check it against real playing before hardcoding it — and it
-doesn't hold up: at the default config (2 octaves, 12-semitone hand
-interval), the right hand's range is root..root+24 and the left hand's is
-root-12..root+12, so the top octave of the left hand's climb (up to
-root+12) overlaps the bottom of the right hand's (from root). A fixed
-threshold misclassifies every note in that overlap.
+## Documentation
 
-Instead, `splitHandsByOnset` in `src/metrics.js` clusters near-simultaneous
-note-ons (hands play together, so each beat produces one LH and one RH onset
-within a fraction of a beat of each other) and takes the lower pitch in each
-pair as the left hand. The fixed threshold is kept as the fallback for the
-rare cluster that isn't a clean pair. Verified against a synthetic run
-spanning the full overlapping range — correctness came back at 100%, where
-the fixed threshold would have misclassified 21 of the 29 left-hand notes
-(every one at or above MIDI 54), leaving a left stream of 8 events against a
-right stream of 50.
+| File | What's in it |
+|---|---|
+| `DOCUMENTATION.md` | The main reference: objective, architecture, **every metric written out in full maths**, the report UI, data model, code map, status and roadmap |
+| `QA.md` | A running log of questions asked about the design and the answers, including several bugs found by asking them |
+| `CONTRIBUTING.md` | How to run it, the one rule about keeping docs in step with code, and how to add a scale |
 
-Full derivation in [DOCUMENTATION.md](DOCUMENTATION.md#6-hand-separation).
-
-## Testing
-
-`test/index.html` is a persisted test suite (no framework, runs the same way the app
-does — open it via the local server above). It covers scale generation, fingering,
-note alignment, and the full `analyzeRun` pipeline against synthetic MIDI events,
-including a regression guard for the hand-overlap issue above. See
-[DOCUMENTATION.md §16](DOCUMENTATION.md#16-testing) for the full list of cases.
-
-No physical MIDI keyboard was available in this environment, so nothing here has been
-verified against real hardware or a real player. Worth doing a hands-on-keyboard pass
-before trusting this for practice — especially the hand-separation clustering window
-(currently `clamp(T × 0.5, 40ms, 200ms)`), which synthetic data can't fully stress-test
-against a real player's hand-sync spread.
+Start with `DOCUMENTATION.md` §7 if you want to understand the scoring; start with
+`CONTRIBUTING.md` if you want to change something.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a new scale is the
+most self-contained starting point and needs no code changes, only two data entries.
+
+Please run the test suite (`test/index.html`, look for `ALL PASS`) before opening a PR.
