@@ -124,7 +124,7 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
     },
   };
 
-  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing: timingFull, legatoL, legatoR };
+  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing: timingFull };
   return run;
 }
 

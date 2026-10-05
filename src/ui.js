@@ -186,31 +186,6 @@ export function renderNoteStrip(container, run) {
       title: (i, v) => (v === null ? "n/a" : `note ${i + 1}: velocity ${v >= 0 ? "+" : ""}${v.toFixed(0)} vs ideal`),
     },
     {
-      // Legato per note, so cancelling overlaps and gaps are visible as a mix of
-      // colours rather than hidden inside a mean of ~0. gtilde[i] is the gap AFTER
-      // note i, so the last note has no cell.
-      name: "Legato R",
-      cells: Array.from({ length: N }, (_, i) => {
-        const g = run._detail.legatoR?.gtilde;
-        if (!g || i >= g.length) return null;
-        return g[i];
-      }),
-      thresholds: [0.08, 0.2],
-      title: (i, v) =>
-        v === null ? "n/a" : `note ${i + 1}: ${v < 0 ? `${(-v * 100).toFixed(0)}% overlap` : `${(v * 100).toFixed(0)}% gap`}`,
-    },
-    {
-      name: "Legato L",
-      cells: Array.from({ length: N }, (_, i) => {
-        const g = run._detail.legatoL?.gtilde;
-        if (!g || i >= g.length) return null;
-        return g[i];
-      }),
-      thresholds: [0.08, 0.2],
-      title: (i, v) =>
-        v === null ? "n/a" : `note ${i + 1}: ${v < 0 ? `${(-v * 100).toFixed(0)}% overlap` : `${(v * 100).toFixed(0)}% gap`}`,
-    },
-    {
       name: "Hand sync",
       cells: Array.from({ length: N }, (_, i) => {
         if (!run._detail.paired || i >= run._detail.paired.length) return null;

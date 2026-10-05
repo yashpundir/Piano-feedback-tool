@@ -1007,3 +1007,76 @@ crescendo really is more important than articulation — but the *output* was no
 which is unusable. Beyond four indices, findings now summarise instead: "dipped at 14
 points through the run (first at note 2)". Past a handful of reversals the fault is the
 shape of the whole crescendo, not particular notes.
+
+---
+
+## Batch 6 — 2026-10-05
+
+### Documentation now matches the code
+
+You were right — §7.6 still showed only the signed mean. Fixed. The section now boxes all
+three numbers and says plainly which one drives the score:
+
+$$\text{articulation} = \frac{1}{N-1}\sum_i \tilde{g}_i \qquad \text{signed: which way you lean}$$
+
+$$\text{articulation\_abs} = \frac{1}{N-1}\sum_i \left| \tilde{g}_i \right| \qquad \text{unsigned: how far from legato}$$
+
+$$\text{articulation\_var} = \sqrt{\frac{1}{N-1}\sum_i \left(\tilde{g}_i - \overline{\tilde{g}}\right)^2} \qquad \text{spread: how consistently}$$
+
+The distinction that matters is between
+
+$$\left|\frac{1}{N-1}\sum_i \tilde{g}_i\right| \qquad\text{and}\qquad \frac{1}{N-1}\sum_i \left|\tilde{g}_i\right|$$
+
+— the size of the average, versus the average of the sizes. The first cancels; the second
+cannot, because every deviation counts as a positive distance whichever direction it goes.
+The score uses the second. Also updated: §8's bar table, §10's schema (`absR`/`absL`),
+§13 and §16.
+
+### `varL` / `varR` in plain words
+
+**The suffix is just the hand.** `varL` is the number for your left hand, `varR` for your
+right. Same calculation, done twice.
+
+**What the number is.** A 29-note run has 28 gaps between consecutive notes. At each one
+you either held too long (overlap), let go too early (gap), or released right on time.
+
+- `articulation` averages those 28 values → **your tendency**
+- `varL` / `varR` measure how much the 28 values **differ from each other** → **your
+  consistency**
+
+**The target analogy.** Think of shots at a target:
+
+| | On a target | In your playing |
+|---|---|---|
+| mean | where your shots are **centred** | whether you tend to overlap, detach, or sit on legato |
+| var | how **scattered** they are | how much your release varies from note to note |
+
+Being centred on the bullseye says nothing about whether your shots are tight or sprayed
+across the whole board. Those are separate facts, and `var` is the only one of the two
+numbers that carries the second.
+
+**Two players, same mean:**
+
+| | 28 gaps look like | mean | var | Sounds like |
+|---|---|---|---|---|
+| A | 0, 0, 0, 0, … | 0 | **0** | genuinely smooth |
+| B | −0.2, +0.2, −0.2, +0.2, … | 0 | **0.2** | alternately glued and chopped |
+
+Identical means, opposite results. That gap is what `var` exists to fill.
+
+**Reading the magnitude:**
+
+| `var` | Means |
+|---|---|
+| ≈ 0.00 | every gap near-identical, machine-like |
+| ≈ 0.05 | varies slightly; normal |
+| ≈ 0.15 | noticeably erratic — the finding fires about here |
+| ≈ 0.25 | all over the place |
+
+### Per-note legato strip rows removed
+
+Agreed, and reverted — the strip already carried four rows and two more cost more in
+clutter than they returned. Articulation is now reported as numbers only for v1: the two
+bars (distance from legato, and consistency) plus the finding. The per-note gaps are still
+computed inside `computeLegato`, so if it ever earns its space, the row is a few lines to
+restore. Recorded in §13 as a deliberate v1 call rather than an oversight.

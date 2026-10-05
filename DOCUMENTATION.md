@@ -943,9 +943,22 @@ early or late — a comfortable 0 to ±0.3, not a vanishing quantity. At 80 BPM 
 Which is why the §9 thresholds sit at $+0.3$ (detached) and $-0.2$ (overlapping), and the
 §8 bar divides by 0.5: the working range is about $\pm 0.3$.
 
-$$\boxed{\ \text{articulation} = \frac{1}{N-1}\sum_i \tilde{g}_i \ } \qquad \text{signed}$$
+Three numbers are computed per hand, and all three are needed — no two of them cover the
+ground:
 
-$$\boxed{\ \text{articulation\_var} = \sqrt{\frac{1}{N-1}\sum_i \left(\tilde{g}_i - \overline{\tilde{g}}\right)^2} \ }$$
+$$\boxed{\ \text{articulation} = \frac{1}{N-1}\sum_i \tilde{g}_i \ } \qquad \text{signed: which way you lean}$$
+
+$$\boxed{\ \text{articulation\_abs} = \frac{1}{N-1}\sum_i \left| \tilde{g}_i \right| \ } \qquad \text{unsigned: how far from legato}$$
+
+$$\boxed{\ \text{articulation\_var} = \sqrt{\frac{1}{N-1}\sum_i \left(\tilde{g}_i - \overline{\tilde{g}}\right)^2} \ } \qquad \text{spread: how consistently}$$
+
+> **The score uses `articulation_abs`, not the signed mean.** Note the difference between
+> $\left|\frac{1}{N-1}\sum \tilde{g}_i\right|$ (the size of the average) and
+> $\frac{1}{N-1}\sum \left|\tilde{g}_i\right|$ (the average of the sizes). The first
+> cancels opposite faults to ≈0 and would score a run that overlaps as much as it gaps as
+> flawless legato; the second cannot cancel, because every deviation counts as a positive
+> distance regardless of direction. The signed mean is still reported — it says which way
+> the player tends, which is actionable — but it does not drive the score.
 
 #### Reading the mean — and what it hides
 
@@ -960,9 +973,42 @@ alone.
 
 #### Reading the variance
 
-`articulation_var` is the standard deviation of $\tilde{g}$ — the **consistency** of
-touch, in the same "fraction of a beat" units as the mean, so the two are directly
-comparable. The pair is read as a 2×2:
+**What it is, in plain terms.** A 29-note run has 28 gaps between consecutive notes (per
+hand). At each one you either held too long (overlap), let go too early (gap), or released
+right on time. `articulation` averages those 28 values; `articulation_var` measures **how
+much they differ from each other.** It is stored as `varL` and `varR` — the same number
+computed separately for each hand; the suffix is only which hand.
+
+The analogy that makes the pair obvious is shots at a target:
+
+| | Target equivalent | Legato equivalent |
+|---|---|---|
+| mean | where your shots are **centred** — left of the bullseye, right of it, or on it | whether you tend to overlap, detach, or sit on exact legato |
+| var | how **scattered** the shots are around that centre | how much your note-to-note release varies |
+
+You can be perfectly centred and still scattered all over the target. That is the whole
+point: those are independent facts, and only `var` carries the second one.
+
+The clearest case — two players whose means are identical:
+
+| | The 28 gaps look like | mean | var | Actually sounds |
+|---|---|---|---|---|
+| Player A | 0, 0, 0, 0, … | 0 | **0** | genuinely smooth |
+| Player B | −0.2, +0.2, −0.2, +0.2, … | 0 | **0.2** | alternately glued together and chopped short |
+
+Same mean. Completely different playing. `var` is the only thing that separates them.
+
+Rough magnitudes, in the same "fraction of a beat" units as everything else in §7.6:
+
+| `var` | Means |
+|---|---|
+| ≈ 0.00 | every gap near-identical — machine-like consistency |
+| ≈ 0.05 | gaps vary slightly; normal, unremarkable |
+| ≈ 0.15 | noticeably erratic — the finding fires around here |
+| ≈ 0.25 | all over the place; some notes glued, others clipped |
+
+Because the mean and the var are in the same units, they can be compared directly, which
+gives the pair a 2×2 reading:
 
 | mean | var | Diagnosis |
 |---|---|---|
@@ -1046,7 +1092,8 @@ it has not earned:
 | Tempo | signed offset as % | $1 - \lvert\text{offset}\rvert / 0.2$ |
 | Hand sync | error in ms | $1 - \text{sync\_error} / 50$ |
 | Dynamics shape | mean shape as % | $\text{shape}$ |
-| Legato | mean $\lvert\text{articulation}\rvert$ | $1 - \overline{\lvert\text{art}\rvert} / 0.5$ |
+| Legato | $\overline{\text{articulation\_abs}}$ across hands | $1 - \overline{\text{abs}} / 0.5$ |
+| Legato consistency | $\overline{\text{articulation\_var}}$ across hands | $1 - \overline{\text{var}} / 0.3$ |
 | Hand balance | signed velocity units | $1 - \lvert\text{balance}\rvert / 30$ |
 
 Fills are clamped to $[0,1]$ and coloured green above 70%, amber above 40%, red below.
@@ -1170,7 +1217,11 @@ these objects):
       "RH": { "bumpV": 9.1, "bumpT": 15.3 },
       "LH": { "bumpV": 4.2, "bumpT": 11.8 }
     },
-    "legato": { "R": 0.04, "L": 0.09, "varR": 0.06, "varL": 0.11 },
+    "legato": {
+      "R": 0.04, "L": 0.09,
+      "absR": 0.07, "absL": 0.12,
+      "varR": 0.06, "varL": 0.11
+    },
     "balance": -6.2
   }
 }
@@ -1276,7 +1327,7 @@ metric is `null` and every unreliable run carries a visible flag.
 | Dynamics — shape, range, reversals, lumpiness, per hand | ✅ |
 | Hand synchronisation — bias and error | ✅ |
 | Thumb-crossing bumps — velocity and timing, per hand | ✅ |
-| Legato — articulation and variance, per hand | ✅ |
+| Legato — signed mean, unsigned mean and variance, per hand, all three surfaced | ✅ |
 | Hand balance | ✅ |
 | Sub-metric bars | ✅ |
 | Per-note strip with hover detail | ✅ |
@@ -1291,7 +1342,7 @@ metric is `null` and every unreliable run carries a visible flag.
 | **Metronome is inert** | The checkbox exists and its value is captured into the run config and persisted, but no audible click is generated — there is no Web Audio code in the project. Either implement it or remove the control; a switch that does nothing is worse than no switch. |
 | Strip does not wrap | Beyond ~4 octaves the strip scrolls horizontally rather than wrapping to a second line. |
 | Crossing findings are per-run | The finding is meant to be that crossings are *systematically* worse; aggregating across runs would make it far more reliable than a single run can. |
-| **`articulation_var` is computed but never shown** | `varL`/`varR` are calculated and persisted in every run, but no bar, strip row or finding reads them. The one articulation fault the signed mean provably cannot detect — overlaps and gaps cancelling to ≈0 (§7.6) — is therefore never reported. Either surface it or stop computing it. |
+| No per-note legato visual | Articulation is reported as three numbers per hand, not as a strip row. A deliberate v1 call — the strip already carries four rows and two more earned their space less than they cost in clutter. The per-note gaps are computed, so adding a row later is a few lines. |
 | Per-crossing residuals not retained | §7.5 reports only the aggregate contrast, so "which crossing was worst" and "do ascending crossings differ from descending ones" can't be answered — including §6's own example prose, "most consistent at F ascending", which the implementation cannot currently produce. |
 | Sparkline shows jitter only | Any stored metric could be trended; jitter was chosen as the single most diagnostic. |
 | Not tested on hardware | See [§16](#16-testing). |
@@ -1446,6 +1497,7 @@ built on), so it runs the same way the app does: open `test/index.html` in a bro
 | Note alignment | Exact match, one insertion, one deletion, one substitution — each classified correctly, not cascaded |
 | Full pipeline (`analyzeRun`) | A clean run scores clean across every metric; hand-pitch-overlap doesn't break separation (see below); one wrong note doesn't tank overall accuracy; a hand-count mismatch flags the run and nulls timing/sync while still computing dynamics; the pedal flag propagates; an all-flat-velocity run degrades to documented values (§12) instead of `NaN` or a crash |
 | Per-hand timing | Both hands measured on a clean run; a synthetic run where only the left hand decelerates is correctly attributed to that hand via `driftDifference`; per-hand timing survives a hand-count mismatch; stored `metrics.timing` carries scalars only, with the residual arrays confined to `_detail` per the §10 schema |
+| Legato | A run alternating $0.2\,T$ overlap and $0.2\,T$ gap: asserts the signed mean cancels to ≈0 while `articulation_abs`, `articulation_var` and the uneven-articulation finding all catch it |
 | Report rendering | Every renderer called against a real run object and checked for emitting output — a smoke test for DOM typos, which the pure-function tests cannot catch — plus the per-hand panel's empty state and the drift-difference finding wording |
 
 Because the metric modules (`stats.js`, `scale.js`, `metrics.js`, `run.js`) have no DOM
