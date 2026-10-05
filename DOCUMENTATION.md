@@ -1526,7 +1526,8 @@ about people, and it has not been tested on anyone.
 runner installed (there is no Node, Deno, Bun or working Python on the machine this was
 built on), so it runs the same way the app does: open `test/index.html` in a browser.
 `test/assert.js` is a ~30-line harness (`test`, `assert`, `assertEqual`, `assertClose`);
-`test/tests.js` holds the cases. 18 cases as of this writing, all passing:
+`test/tests.js` holds the cases. 33 cases as of this writing, all passing — the runner
+prints the live count, which is the number to trust:
 
 | Area | What's covered |
 |---|---|
