@@ -960,3 +960,50 @@ about. That's the worst possible thing to have left unwired, and it's now record
 Fixing it is small: a legato consistency finding (fires when `var` exceeds, say, 0.15 or
 exceeds $|\text{mean}|$), and either a second bar or a value shown alongside the existing
 legato bar. Want me to wire it up?
+
+---
+
+## Batch 5 — 2026-10-05 (follow-up on 14)
+
+### Yes — the cancelling mean was a real hole. Now fixed.
+
+The mean can't be rescued on its own; it needs companions. Three changes:
+
+**1. A per-note legato row in the strip.** This project's own principle is location over
+magnitude — every metric is computed per note before averaging, and averaging is what
+throws the location away. The per-note gaps $\tilde{g}_i$ already existed; they just were
+never drawn. There are now `Legato R` / `Legato L` rows, so a run that alternates overlap
+and gap shows as alternating colours instead of hiding inside a mean of ≈0. Hovering a
+cell reads "note 7: 20% overlap" or "note 8: 20% gap".
+
+**2. The legato bar is now scored on the unsigned mean**,
+$\frac{1}{N-1}\sum_i |\tilde{g}_i|$, stored as `absL` / `absR`. This is the direct fix: a
+run that overlaps exactly as much as it gaps is *not* legato, yet its signed mean is ≈0
+and used to score a perfect bar. The signed mean is still reported — it answers a
+different question, *which way do you tend?* — but it no longer drives the score.
+
+**3. `articulation_var` is finally wired up** — a "Legato consistency" bar, plus a finding
+that fires when the spread exceeds both 0.15 and $|\text{mean}|$:
+
+> Your right-hand articulation is uneven — some notes run together while others are
+> clipped short.
+
+Together the three are complete, and no two of them suffice: `abs` says **how far** from
+legato, the signed mean says **in which direction**, `var` says **how consistently**.
+
+A test now constructs the pathological case directly — every odd note overlapping by
+$0.2\,T$, every even note gapping by $0.2\,T$ — and asserts the signed mean cancels to
+≈0 while `var`, `abs` and the finding all catch it.
+
+### An incidental fix that test turned up
+
+It first failed for an unrelated reason worth recording. The legato finding was being
+crowded out of the top three by **fourteen** reversal findings, because a flat-velocity
+run makes every single step a reversal. The *prioritisation* was right — a missing
+crescendo really is more important than articulation — but the *output* was not:
+
+> Your left-hand crescendo dipped at notes 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15.
+
+which is unusable. Beyond four indices, findings now summarise instead: "dipped at 14
+points through the run (first at note 2)". Past a handful of reversals the fault is the
+shape of the whole crescendo, not particular notes.

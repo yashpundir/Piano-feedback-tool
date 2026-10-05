@@ -73,8 +73,12 @@ export function renderSubmetrics(container, run) {
   }
 
   if (m.legato) {
-    const avgArt = (Math.abs(m.legato.L) + Math.abs(m.legato.R)) / 2;
-    container.appendChild(bar("Legato", `${avgArt.toFixed(2)}× beat gap`, 1 - avgArt / 0.5));
+    // Scored on the unsigned mean, not the signed one: a run that overlaps as much as it
+    // gaps is not legato, but its signed mean is ~0 and would have scored perfect here.
+    const avgAbs = ((m.legato.absL ?? Math.abs(m.legato.L)) + (m.legato.absR ?? Math.abs(m.legato.R))) / 2;
+    container.appendChild(bar("Legato", `${avgAbs.toFixed(2)}× beat off`, 1 - avgAbs / 0.5));
+    const avgVar = (m.legato.varL + m.legato.varR) / 2;
+    container.appendChild(bar("Legato consistency", `±${avgVar.toFixed(2)}`, 1 - avgVar / 0.3));
   }
 
   if (m.balance !== null && m.balance !== undefined) {
@@ -180,6 +184,31 @@ export function renderNoteStrip(container, run) {
       }),
       thresholds: [8, 20],
       title: (i, v) => (v === null ? "n/a" : `note ${i + 1}: velocity ${v >= 0 ? "+" : ""}${v.toFixed(0)} vs ideal`),
+    },
+    {
+      // Legato per note, so cancelling overlaps and gaps are visible as a mix of
+      // colours rather than hidden inside a mean of ~0. gtilde[i] is the gap AFTER
+      // note i, so the last note has no cell.
+      name: "Legato R",
+      cells: Array.from({ length: N }, (_, i) => {
+        const g = run._detail.legatoR?.gtilde;
+        if (!g || i >= g.length) return null;
+        return g[i];
+      }),
+      thresholds: [0.08, 0.2],
+      title: (i, v) =>
+        v === null ? "n/a" : `note ${i + 1}: ${v < 0 ? `${(-v * 100).toFixed(0)}% overlap` : `${(v * 100).toFixed(0)}% gap`}`,
+    },
+    {
+      name: "Legato L",
+      cells: Array.from({ length: N }, (_, i) => {
+        const g = run._detail.legatoL?.gtilde;
+        if (!g || i >= g.length) return null;
+        return g[i];
+      }),
+      thresholds: [0.08, 0.2],
+      title: (i, v) =>
+        v === null ? "n/a" : `note ${i + 1}: ${v < 0 ? `${(-v * 100).toFixed(0)}% overlap` : `${(v * 100).toFixed(0)}% gap`}`,
     },
     {
       name: "Hand sync",

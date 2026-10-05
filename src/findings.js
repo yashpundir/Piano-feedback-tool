@@ -42,7 +42,12 @@ export function generateFindings(run) {
     // Steps before the peak are crescendo dips; steps at or after it are diminuendo
     // swells — opposite faults, so they can't share one sentence.
     const k = run.sequence?.k;
-    const noteLabel = (steps) => steps.map((i) => i + 2).join(", ");
+    // Listing a dozen note numbers is unusable. Past a handful, say how many instead —
+    // at that point the fault is the whole shape, not specific notes.
+    const noteLabel = (steps) =>
+      steps.length <= 4
+        ? steps.map((i) => i + 2).join(", ")
+        : `${steps.length} points through the run (first at note ${steps[0] + 2})`;
     const dips = k === undefined ? d.reversals : d.reversals.filter((i) => i < k);
     const swells = k === undefined ? [] : d.reversals.filter((i) => i >= k);
 
@@ -113,10 +118,19 @@ export function generateFindings(run) {
     if (!m.legato) continue;
     const art = m.legato[artKey];
     const label = hand === "L" ? "left" : "right";
+    const variance = m.legato[hand === "L" ? "varL" : "varR"];
     if (art > 0.3) {
       candidates.push({ severity: art * 3, text: `Your ${label}-hand notes are detached rather than legato.` });
     } else if (art < -0.2) {
       candidates.push({ severity: -art * 3, text: `Your ${label}-hand notes are overlapping — aim for clean legato.` });
+    }
+    // The fault the signed mean cannot see: overlaps and gaps cancelling to ~0. When the
+    // spread exceeds the tendency, inconsistency is the real problem.
+    if (variance !== undefined && variance > 0.15 && variance > Math.abs(art)) {
+      candidates.push({
+        severity: variance * 3,
+        text: `Your ${label}-hand articulation is uneven — some notes run together while others are clipped short.`,
+      });
     }
   }
 

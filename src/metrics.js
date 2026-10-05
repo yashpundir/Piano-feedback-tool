@@ -185,7 +185,12 @@ export function computeLegato(eventsSortedByOnset, T) {
     g.push(eventsSortedByOnset[i + 1].onset - eventsSortedByOnset[i].offset);
   }
   const gtilde = g.map((x) => x / T);
-  return { articulation: mean(gtilde), articulation_var: stdev(gtilde), gtilde };
+  return {
+    articulation: mean(gtilde), // signed: net tendency, opposite faults cancel
+    articulation_abs: mean(gtilde.map(Math.abs)), // unsigned: total distance from legato
+    articulation_var: stdev(gtilde), // consistency
+    gtilde,
+  };
 }
 
 // ---- 4.7 Hand balance ----

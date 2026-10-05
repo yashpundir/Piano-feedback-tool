@@ -358,6 +358,33 @@ test("findings: a dip before the peak and a swell after it are reported as diffe
   );
 });
 
+test("legato: alternating overlap and gap cancels in the mean but is caught by var and reported", () => {
+  // The §7.6 blind spot: every odd note overlaps by 0.2T, every even note gaps by 0.2T.
+  // Signed mean lands near 0 - textbook legato by that measure alone - while the run
+  // actually alternates mush and chop.
+  const expected = generateSequence(CONFIG);
+  const T = 60000 / (CONFIG.bpm * CONFIG.notesPerBeat);
+  const events = [];
+  for (let i = 0; i < expected.N; i++) {
+    const onsetBase = i * T;
+    const hold = i % 2 === 0 ? T * 1.2 : T * 0.8; // overlap, then gap
+    // proper triangle velocities, so dynamics findings stay quiet and legato is isolated
+    const u = i <= expected.k ? i / expected.k : (expected.N - 1 - i) / (expected.N - 1 - expected.k);
+    const vel = Math.round(40 + u * 60);
+    events.push({ pitch: expected.RH[i], velocity: vel, onset: onsetBase, offset: onsetBase + hold });
+    events.push({ pitch: expected.LH[i], velocity: vel, onset: onsetBase + 3, offset: onsetBase + 3 + hold });
+  }
+  const run = analyzeRun(CONFIG, events, false);
+
+  assertClose(run.metrics.legato.R, 0, 0.05, "signed mean should cancel to about zero");
+  assert(run.metrics.legato.varR > 0.15, `var should expose it, got ${run.metrics.legato.varR}`);
+  assert(run.metrics.legato.absR > 0.15, `unsigned mean should expose it, got ${run.metrics.legato.absR}`);
+  assert(
+    generateFindings(run).some((f) => f.includes("articulation is uneven")),
+    `the uneven-articulation finding should fire, got: ${JSON.stringify(generateFindings(run))}`
+  );
+});
+
 test("report renderers: all of them run against a real run object without throwing", () => {
   const expected = generateSequence(CONFIG);
   const { events } = buildCleanRunEvents(CONFIG, expected);

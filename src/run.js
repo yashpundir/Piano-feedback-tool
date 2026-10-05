@@ -111,13 +111,20 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
       sync,
       crossings,
       legato: legatoL && legatoR
-        ? { R: legatoR.articulation, L: legatoL.articulation, varR: legatoR.articulation_var, varL: legatoL.articulation_var }
+        ? {
+            R: legatoR.articulation,
+            L: legatoL.articulation,
+            absR: legatoR.articulation_abs,
+            absL: legatoL.articulation_abs,
+            varR: legatoR.articulation_var,
+            varL: legatoL.articulation_var,
+          }
         : null,
       balance,
     },
   };
 
-  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing: timingFull };
+  run._detail = { expected, L, R, paired, T, splitPt, dynamicsL, dynamicsR, timing: timingFull, legatoL, legatoR };
   return run;
 }
 
