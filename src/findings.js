@@ -42,25 +42,31 @@ export function generateFindings(run) {
     // Steps before the peak are crescendo dips; steps at or after it are diminuendo
     // swells — opposite faults, so they can't share one sentence.
     const k = run.sequence?.k;
-    // Listing a dozen note numbers is unusable. Past a handful, say how many instead —
-    // at that point the fault is the whole shape, not specific notes.
-    const noteLabel = (steps) =>
-      steps.length <= 4
-        ? steps.map((i) => i + 2).join(", ")
-        : `${steps.length} points through the run (first at note ${steps[0] + 2})`;
+    // Builds the complete location phrase, including the preposition, so the summary
+    // form doesn't end up with "notes" bolted onto the front of it. Listing a dozen note
+    // numbers is unusable, so past a handful it says how many instead — at that point
+    // the fault is the shape of the whole run, not particular notes.
+    const locationPhrase = (steps) => {
+      const notes = steps.map((i) => i + 2);
+      if (notes.length === 1) return `at note ${notes[0]}`;
+      if (notes.length <= 4) {
+        return `at notes ${notes.slice(0, -1).join(", ")} and ${notes[notes.length - 1]}`;
+      }
+      return `at ${notes.length} points through the run, starting at note ${notes[0]}`;
+    };
     const dips = k === undefined ? d.reversals : d.reversals.filter((i) => i < k);
     const swells = k === undefined ? [] : d.reversals.filter((i) => i >= k);
 
     if (dips.length > 0) {
       candidates.push({
         severity: dips.length,
-        text: `Your ${label}-hand crescendo dipped at note${dips.length > 1 ? "s" : ""} ${noteLabel(dips)}.`,
+        text: `Your ${label}-hand crescendo dipped ${locationPhrase(dips)}.`,
       });
     }
     if (swells.length > 0) {
       candidates.push({
         severity: swells.length,
-        text: `Your ${label}-hand diminuendo got louder instead of softer at note${swells.length > 1 ? "s" : ""} ${noteLabel(swells)}.`,
+        text: `Your ${label}-hand diminuendo got louder instead of softer ${locationPhrase(swells)}.`,
       });
     }
     if (d.range < 30) {

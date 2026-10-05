@@ -385,6 +385,28 @@ test("legato: alternating overlap and gap cancels in the mean but is caught by v
   );
 });
 
+test("findings: location phrases are grammatical at one, few and many reversals", () => {
+  const makeRun = (reversals) => ({
+    sequence: { N: 29, k: 14 },
+    metrics: {
+      timing: null, timingPerHand: null, sync: null, crossings: null, legato: null, balance: null,
+      correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },
+      dynamics: { R: { shape: 0.9, range: 60, reversals, lumpiness: 0.2 }, L: null },
+    },
+  });
+
+  const one = generateFindings(makeRun([3]))[0];
+  assert(one.includes("at note 5."), `single: ${one}`);
+
+  const few = generateFindings(makeRun([3, 5, 7]))[0];
+  assert(few.includes("at notes 5, 7 and 9."), `few: ${few}`);
+
+  const many = generateFindings(makeRun([3, 5, 7, 9, 11]))[0];
+  assert(many.includes("at 5 points through the run, starting at note 5."), `many: ${many}`);
+  // the bug this guards: "at notes 8 points through the run (first at note 16)"
+  assert(!/notes \d+ points/.test(many), `"notes N points" is not English: ${many}`);
+});
+
 test("report renderers: all of them run against a real run object without throwing", () => {
   const expected = generateSequence(CONFIG);
   const { events } = buildCleanRunEvents(CONFIG, expected);

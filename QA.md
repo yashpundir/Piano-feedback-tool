@@ -1080,3 +1080,112 @@ clutter than they returned. Articulation is now reported as numbers only for v1:
 bars (distance from legato, and consistency) plus the finding. The per-note gaps are still
 computed inside `computeLegato`, so if it ever earns its space, the row is a few lines to
 restore. Recorded in §13 as a deliberate v1 call rather than an oversight.
+
+---
+
+## Batch 7 — 2026-10-06 (first real-hardware run)
+
+Five UI issues from playing the app on an actual piano. All five were real; four are
+fixed, and the fifth turned out to be correct behaviour badly explained.
+
+### The chart overflowed its card
+
+The canvas had a hardcoded `width="900"` while the card it sits in is around 680px, so it
+simply ran off the right edge. It now sizes itself to its container at render time, with
+the backing store scaled by `devicePixelRatio` so the lines stay sharp rather than being
+stretched up from a smaller bitmap. A `max-width: 100%` on `canvas` acts as a backstop.
+
+### Two ideal lines — you were right, it should be one
+
+The ideal ramp is rescaled to each hand's own min and max
+($\hat{v}_i = \min v + u_i(\max v - \min v)$), and the chart drew that per hand. Since the
+two hands had different velocity ranges, the two dashed lines landed at different heights
+— which reads, exactly as you said, as though the hands had different targets. They don't:
+the prescribed shape is identical for both, and the hands are supposed to be balanced
+anyway (§7.7).
+
+Now a single dashed reference, drawn from the pooled min and max across both hands, and
+labelled "Ideal shape" in the legend.
+
+**One honest trade-off**, now in §8: `shape` is still computed **per hand** against that
+hand's own ramp — deliberately, so that a quiet hand isn't penalised for being quiet. So a
+uniformly softer hand will sit below the single reference line without necessarily having
+a shape problem. That vertical offset is what `balance` measures. The line is a visual
+reference; the per-hand `shape` percentages are the numbers to trust.
+
+### "at notes 8 points through the run" — broken, my fault
+
+The sentence was being assembled from two pieces that didn't fit together: the template
+supplied `at note(s) …` and the location function returned either `5, 7` or
+`8 points through the run (first at note 16)`. The second slotted into the first and
+produced nonsense.
+
+The location function now returns the **whole phrase**, preposition included:
+
+| Count | Reads |
+|---|---|
+| one | "…dipped **at note 5**." |
+| a few | "…dipped **at notes 5, 7 and 9**." |
+| many | "…got louder instead of softer **at 8 points through the run, starting at note 16**." |
+
+A test now asserts all three forms, including a regex that fails on the exact
+`notes <number> points` construction that produced the original.
+
+### "How does note 1 have an ideal?" — correct behaviour, badly explained
+
+This one isn't a bug, and it's a good catch, because the reasoning isn't obvious.
+
+Since $u_0 = 0$, the ideal for the first note is
+
+$$\hat{v}_0 = \min_j v_j + 0 \cdot (\max_j v_j - \min_j v_j) = \min_j v_j$$
+
+So note 1's target is **your quietest note of the entire run** — not whatever you happened
+to play first. Your intuition was that note 1 should be its own reference; the model says
+instead that note 1 *should have been* your quietest note, because that is what a correct
+triangle looks like.
+
+So "note 1: +4" is a real finding, and it means: *somewhere later in the run you played
+something 4 units quieter than your opening note.* Your crescendo didn't start from the
+bottom.
+
+That said, min/max anchoring makes three positions one-sided, now documented in §7.5:
+
+| Position | Ideal is | Residual can only be |
+|---|---|---|
+| first note | the run's minimum | $\ge 0$ |
+| peak note $k$ | the run's maximum | $\le 0$ |
+| last note | the run's minimum | $\ge 0$ |
+
+A least-squares fit of the triangle — the treatment §7.1 already gives timing — would
+remove that bias and make the residuals sum to zero, at the cost of an ideal that no
+longer passes through your actual extremes. Noted for v2.
+
+The tooltip was also just cryptic. It now shows the numbers rather than only the
+difference: **"note 1: played 48, ideal 44 (+4)"**.
+
+### The legato bars meant nothing as labelled
+
+"0.12× beat off" and "±0.17" were unreadable, and the second had no units at all. Both
+are fractions of a beat, so they're now stated as percentages with the unit spelled out,
+and renamed away from the jargon:
+
+| Was | Now | Means |
+|---|---|---|
+| Legato — "0.12× beat off" | **Note connection** — "12% of a beat off" | On average your notes missed joining up cleanly by 12% of a beat — either a gap or an overlap |
+| Legato consistency — "±0.17" | **Connection consistency** — "varies ±17% of a beat" | How much that varies note to note. Small = every note joined alike; large = some run together, others clipped |
+
+Every bar in "How you did" now also carries a plain-English explanation on hover, since
+none of them had one.
+
+### One more thing, found in your screenshots
+
+Your run was flagged for mismatched hand note counts, and the per-hand timing panel still
+reported drift of −109% and −144%. Those numbers are almost certainly not your playing:
+when the hand counts don't match, notes have been assigned to the wrong hand, so each
+hand's onset sequence is partly scrambled and its drift is meaningless. The panel now says
+so directly when a run is flagged, rather than presenting a separation failure as a
+tempo fault.
+
+That mismatch is itself worth chasing — it means the onset clustering (§6) didn't
+cleanly pair your hands on a real performance, which is exactly the open question §15
+flagged as needing real-player validation. Worth looking at the raw event log next time.

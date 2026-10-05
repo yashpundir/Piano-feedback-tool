@@ -833,6 +833,29 @@ That is the ideal triangle rescaled to the player's own dynamic range. Then:
 
 $$\mathrm{vres}_i = v_i - \hat{v}_i \qquad [\text{velocity units}]$$
 
+> **What the ideal is at the endpoints, and the bias this creates.** Because the ramp is
+> anchored to the player's own extremes, $\hat{v}_0 = \min_j v_j$ exactly, and
+> $\hat{v}_k = \max_j v_j$ exactly. So the ideal for the **first** note is "your quietest
+> note of the whole run" — not whatever you happened to play first.
+>
+> That is deliberate, and it carries real information: in a correct triangle the first
+> note *is* the quietest. If note 1 shows a positive residual, it means you played
+> something quieter later on, so your crescendo did not actually start from the bottom.
+>
+> It does, however, make three positions structurally one-sided, which is worth knowing
+> before reading too much into them:
+>
+> | Position | Ideal is | Residual can only be |
+> |---|---|---|
+> | first note | the run's minimum | $\ge 0$ |
+> | peak note $k$ | the run's maximum | $\le 0$ |
+> | last note | the run's minimum | $\ge 0$ |
+>
+> A least-squares fit of the triangle — the same treatment §7.1 gives timing — would
+> remove the bias and make the residuals sum to zero, at the cost of an ideal line no
+> longer passing through the player's actual extremes. Worth revisiting in v2; the
+> min/max anchoring is simpler to explain and the bias only affects three of 29 notes.
+
 $$\mathrm{tres}_i = r_i = \mathrm{IOI}_i - (a + b\,i) \qquad [\text{ms}]$$
 
 The timing residuals are reused directly from [§7.1](#71-timing--three-way-decomposition).
@@ -1092,9 +1115,9 @@ it has not earned:
 | Tempo | signed offset as % | $1 - \lvert\text{offset}\rvert / 0.2$ |
 | Hand sync | error in ms | $1 - \text{sync\_error} / 50$ |
 | Dynamics shape | mean shape as % | $\text{shape}$ |
-| Legato | $\overline{\text{articulation\_abs}}$ across hands | $1 - \overline{\text{abs}} / 0.5$ |
-| Legato consistency | $\overline{\text{articulation\_var}}$ across hands | $1 - \overline{\text{var}} / 0.3$ |
-| Hand balance | signed velocity units | $1 - \lvert\text{balance}\rvert / 30$ |
+| Note connection | $\overline{\text{articulation\_abs}}$ across hands, shown as % of a beat | $1 - \overline{\text{abs}} / 0.5$ |
+| Connection consistency | $\overline{\text{articulation\_var}}$ across hands, shown as ± % of a beat | $1 - \overline{\text{var}} / 0.3$ |
+| Hand balance | which hand is softer, and by how many velocity units | $1 - \lvert\text{balance}\rvert / 30$ |
 
 Fills are clamped to $[0,1]$ and coloured green above 70%, amber above 40%, red below.
 These divisors are display conveniences chosen for legibility, **not** empirical anchors.
@@ -1133,9 +1156,25 @@ wrap to a second line; today it scrolls horizontally instead.
 
 ### Velocity chart
 
-A line chart of velocity against note index with the ideal triangle overlaid as a dashed
-line, both hands on the same axes. This is the most legible single view of the dynamics
+A line chart of velocity against note index, both hands on the same axes, with **one**
+dashed ideal triangle across them. This is the most legible single view of the dynamics
 goal — the player sees their crescendo and the intended crescendo in the same picture.
+
+The canvas sizes itself to its container (scaled by `devicePixelRatio` so lines stay
+crisp); a fixed pixel width overflowed the card on narrower screens.
+
+> **Why one ideal line and not one per hand.** The metric rescales the ideal ramp to each
+> hand's own min and max, so drawing both produced two dashed lines at slightly different
+> heights — which reads as though the hands had different targets. They do not: the
+> prescribed shape is identical for both, and the hands are meant to be balanced anyway
+> (§7.7). The chart therefore draws a single reference from the pooled min and max across
+> both hands.
+>
+> The trade-off, stated plainly: `shape` is still computed **per hand** against that
+> hand's own rescaled ramp, so a uniformly quieter hand will sit below this single
+> reference line without necessarily having a shape problem. That offset is what the
+> `balance` metric measures, and the per-hand `shape` percentages in Layer 2 are the
+> numbers to trust for shape. The line is a visual reference, not the metric.
 
 ---
 

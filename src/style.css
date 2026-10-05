@@ -216,6 +216,11 @@ button + button {
   padding-left: 0.75rem;
 }
 
+canvas {
+  max-width: 100%;
+  display: block;
+}
+
 .note-strip {
   overflow-x: auto;
 }
