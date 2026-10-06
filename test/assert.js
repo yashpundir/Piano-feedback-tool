@@ -6,14 +6,29 @@
 // dependency at all.
 
 const results = [];
+const pending = [];
 
 export function test(name, fn) {
   try {
-    fn();
+    const maybePromise = fn();
+    if (maybePromise && typeof maybePromise.then === "function") {
+      pending.push(
+        maybePromise
+          .then(() => results.push({ name, pass: true }))
+          .catch((err) => results.push({ name, pass: false, error: err.message }))
+      );
+      return;
+    }
     results.push({ name, pass: true });
   } catch (err) {
     results.push({ name, pass: false, error: err.message });
   }
+}
+
+// Async cases (anything that has to fetch a file) settle after the module body runs,
+// so the runner awaits this before reading results.
+export function settle() {
+  return Promise.all(pending);
 }
 
 export function assert(cond, msg) {

@@ -24,8 +24,9 @@
 
   <script type="module">
     import "./tests.js";
-    import { getResults } from "./assert.js";
+    import { getResults, settle } from "./assert.js";
 
+    await settle();
     const results = getResults();
     const passed = results.filter((r) => r.pass).length;
     const failed = results.length - passed;

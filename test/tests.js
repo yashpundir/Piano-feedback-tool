@@ -479,3 +479,18 @@ test("analyzeRun: a run with no crescendo (flat velocity) is reported, not crash
   assert(!Number.isNaN(run.metrics.dynamics.R.shape), "the span=0 guard must prevent NaN, not just avoid throwing");
   assertEqual(run.metrics.dynamics.R.reversals.length, expected.N - 1, "every flat step counts as a reversal");
 });
+
+// ---------------------------------------------------------------------------
+// Deployment shape. These catch faults that are invisible locally and only appear
+// once the app is served from a subpath, as GitHub Pages does.
+// ---------------------------------------------------------------------------
+
+test("deployment: index.html uses relative asset paths, not absolute ones", async () => {
+  // An absolute "/src/main.js" resolves against the DOMAIN root, so on
+  // user.github.io/repo-name/ it 404s and the page renders as a bare title with no
+  // styling and no JS. Works locally only because the dev server root is the project
+  // folder. Relative paths work in both.
+  const html = await fetch("../index.html").then((r) => r.text());
+  const absolute = [...html.matchAll(/(?:src|href)="(\/[^"]*)"/g)].map((m) => m[1]);
+  assertDeepEqual(absolute, [], "absolute asset paths break any non-root deploy");
+});
