@@ -828,13 +828,13 @@ rather than clean.
 Each note's deviation from where it should have been. These feed the per-note strip
 (§8), and are the raw material for the planned consistency detector (§14).
 
-$$hat{v}_i = min_j v_j + u_ileft(max_j v_j - min_j v_jight)$$
+$$\hat{v}_i = \min_j v_j + u_i\left(\max_j v_j - \min_j v_j\right)$$
 
 That is the ideal triangle from §7.3, rescaled to the player's own dynamic range. Then:
 
-$$mathrm{vres}_i = v_i - hat{v}_i qquad [	ext{velocity units}]$$
+$$\mathrm{vres}_i = v_i - \hat{v}_i \qquad [\text{velocity units}]$$
 
-$$mathrm{tres}_i = r_i = mathrm{IOI}_i - (a + b,i) qquad [	ext{ms}]$$
+$$\mathrm{tres}_i = r_i = \mathrm{IOI}_i - (a + b\,i) \qquad [\text{ms}]$$
 
 The timing residuals are reused directly from [§7.1](#71-timing--three-way-decomposition).
 Since the hands play together there is one shared timing residual sequence, while the
@@ -845,8 +845,8 @@ crescendo, so a loud note proves nothing on its own — only loud *relative to w
 crescendo should have been at that point* means anything.
 
 > **What the ideal is at the endpoints, and the bias this creates.** Because the ramp is
-> anchored to the player's own extremes, $hat{v}_0 = min_j v_j$ exactly, and
-> $hat{v}_k = max_j v_j$ exactly. So the ideal for the **first** note is "your quietest
+> anchored to the player's own extremes, $\hat{v}_0 = \min_j v_j$ exactly, and
+> $\hat{v}_k = \max_j v_j$ exactly. So the ideal for the **first** note is "your quietest
 > note of the whole run" — not whatever you happened to play first.
 >
 > That is deliberate, and it carries real information: in a correct triangle the first
@@ -858,9 +858,9 @@ crescendo should have been at that point* means anything.
 >
 > | Position | Ideal is | Residual can only be |
 > |---|---|---|
-> | first note | the run's minimum | $ge 0$ |
-> | peak note $k$ | the run's maximum | $le 0$ |
-> | last note | the run's minimum | $ge 0$ |
+> | first note | the run's minimum | $\ge 0$ |
+> | peak note $k$ | the run's maximum | $\le 0$ |
+> | last note | the run's minimum | $\ge 0$ |
 >
 > A least-squares fit of the triangle — the same treatment §7.1 gives timing — would
 > remove the bias and make the residuals sum to zero, at the cost of an ideal line no
@@ -872,8 +872,7 @@ crescendo should have been at that point* means anything.
 Earlier versions derived thumb-crossing indices $C$ from a hardcoded fingering table and
 reported how much worse those notes were than the rest:
 
-$$	ext{bump}_v = rac{1}{|C|} um_{i in C} mathrm{vres}_i - rac{1}{|ar{C}|} um_{i 
-otin C} mathrm{vres}_i$$
+$$\text{bump}_v = \frac{1}{|C|}\sum_{i \in C} \mathrm{vres}_i \;-\; \frac{1}{|\bar{C}|}\sum_{i \notin C} \mathrm{vres}_i$$
 
 **This was removed, and should not be reinstated in this form.** The reasoning, raised by
 a contributor who plays with non-standard fingering adapted for range-of-motion
@@ -905,12 +904,11 @@ The removed metric was a **contrast** — crossing notes against everything else
 than a raw average of crossing residuals, and that choice was correct for a reason that
 still applies.
 
-$hat{v}$ is anchored to the player's min and max only at the endpoints, so the middle is
-free to deviate and $ um_i mathrm{vres}_i 
-e 0$ in general. A player whose crescendo
+$\hat{v}$ is anchored to the player's min and max only at the endpoints, so the middle is
+free to deviate and $\sum_i \mathrm{vres}_i \ne 0$ in general. A player whose crescendo
 bulges above the straight ramp has *every* mid-run note sitting high:
 
-| Player | $mathrm{vres}$ at a given note | $mathrm{vres}$ elsewhere | Raw reading | Contrast |
+| Player | $\mathrm{vres}$ at a given note | $\mathrm{vres}$ elsewhere | Raw reading | Contrast |
 |---|---|---|---|---|
 | Convex crescendo, even touch | +6 | +6 | "this note is 6 units loud" ✗ | **0** ✓ |
 | Straight crescendo, one heavy note | +9 | 0 | "this note is 9 units loud" ✓ | **+9** ✓ |
