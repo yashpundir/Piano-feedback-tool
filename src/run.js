@@ -1,4 +1,4 @@
-import { generateSequence, generateFingering, deriveCrossings, splitPoint } from "./scale.js";
+import { generateSequence, splitPoint } from "./scale.js";
 import {
   splitHandsByOnset,
   pairHands,
@@ -6,7 +6,6 @@ import {
   alignGreedy,
   computeDynamics,
   computeSync,
-  computeCrossingBump,
   computeLegato,
   computeBalance,
 } from "./metrics.js";
@@ -69,28 +68,11 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
 
   let timingFull = null;
   let sync = null;
-  let crossings = null;
 
   if (!mismatched && paired.length > 1) {
     const tau = paired.map((p) => (p.L.onset + p.R.onset) / 2);
     timingFull = computeTiming(tau, T);
     sync = computeSync(paired);
-
-    if (dynamicsL && dynamicsR) {
-      const fingerRH = generateFingering({ root, mode, octaves, hand: "RH" });
-      const fingerLH = generateFingering({ root, mode, octaves, hand: "LH" });
-      const crossRH = deriveCrossings(fingerRH.slice(0, R.length));
-      const crossLH = deriveCrossings(fingerLH.slice(0, L.length));
-      const velResR = R.map((e, i) => e.velocity - dynamicsR.idealVelocities[i]);
-      const velResL = L.map((e, i) => e.velocity - dynamicsL.idealVelocities[i]);
-      const bumpRH = computeCrossingBump(crossRH, velResR, timingFull.residuals);
-      const bumpLH = computeCrossingBump(crossLH, velResL, timingFull.residuals);
-      crossings = {
-        indices: { RH: crossRH, LH: crossLH },
-        RH: bumpRH,
-        LH: bumpLH,
-      };
-    }
   }
 
   const run = {
@@ -109,7 +91,6 @@ export function analyzeRun(config, rawEvents, pedalDetected) {
       correctness,
       dynamics: { L: dynamicsL, R: dynamicsR },
       sync,
-      crossings,
       legato: legatoL && legatoR
         ? {
             R: legatoR.articulation,

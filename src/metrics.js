@@ -162,20 +162,6 @@ export function computeSync(paired) {
   return { bias, error, e };
 }
 
-// ---- 4.5 Thumb-crossing accents ----
-// velRes/timeRes are residuals indexed the same way as the note sequence;
-// timeRes has length N-1 (one per IOI), so a crossing at the last index has no timing residual.
-
-export function computeCrossingBump(crossings, velRes, timeRes) {
-  const idxSet = new Set(crossings);
-  const crossV = velRes.filter((_, i) => idxSet.has(i));
-  const restV = velRes.filter((_, i) => !idxSet.has(i));
-  const crossT = timeRes.filter((_, i) => idxSet.has(i));
-  const restT = timeRes.filter((_, i) => !idxSet.has(i));
-  const bumpV = crossV.length ? mean(crossV) - mean(restV) : 0;
-  const bumpT = crossT.length ? mean(crossT) - mean(restT) : 0;
-  return { bumpV, bumpT };
-}
 
 // ---- 4.6 Legato / articulation ----
 

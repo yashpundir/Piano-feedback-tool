@@ -48,6 +48,11 @@ test("sequence generation: left hand is right hand minus the hand interval", () 
 
 // ---------------------------------------------------------------------------
 // Fingering and thumb crossings (§3)
+//
+// NOTE: this data is DORMANT — no metric uses it (see the banner in src/scale.js).
+// These tests are kept because the tables are still correct and will be reused as an
+// explanation layer later; they protect the data, not any live behaviour. Do not take
+// their presence as licence to wire fingering back into the analysis path.
 // ---------------------------------------------------------------------------
 
 test("fingering: RH crossings for 1 octave are the thumb-under (asc) and 3rd-over (desc)", () => {
@@ -337,7 +342,6 @@ test("findings: a dip before the peak and a swell after it are reported as diffe
       timing: null,
       timingPerHand: null,
       sync: null,
-      crossings: null,
       legato: null,
       balance: null,
       correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },
@@ -389,7 +393,7 @@ test("findings: location phrases are grammatical at one, few and many reversals"
   const makeRun = (reversals) => ({
     sequence: { N: 29, k: 14 },
     metrics: {
-      timing: null, timingPerHand: null, sync: null, crossings: null, legato: null, balance: null,
+      timing: null, timingPerHand: null, sync: null, legato: null, balance: null,
       correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },
       dynamics: { R: { shape: 0.9, range: 60, reversals, lumpiness: 0.2 }, L: null },
     },
@@ -450,7 +454,6 @@ test("findings: names the hand when one hand loses tempo relative to the other",
       timingPerHand: { L: null, R: null, driftDifference: 0.4 },
       dynamics: { L: null, R: null },
       sync: null,
-      crossings: null,
       legato: null,
       balance: null,
       correctness: { M: 1, S: 0, I: 0, D: 0, accuracy: 1 },

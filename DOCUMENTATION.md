@@ -40,9 +40,10 @@ Three faults in particular are effectively invisible from the bench:
 - **Hand synchronisation.** A consistent 10–15 ms lag between the hands is inaudible
   as a discrete event, but it is precisely what makes a scale sound smeared rather
   than clean. Neither the player nor most teachers can reliably detect it by ear.
-- **Thumb-crossing accents.** The thumb is heavier than the other fingers, so crossings
-  land louder and later. Because the crescendo is *supposed* to be rising, a loud thumb
-  note sounds plausible in context and passes unnoticed.
+- **A consistently heavy finger.** The thumb is heavier than the others and tends to
+  thump on crossings, but any finger can be the culprit — a weak fourth is just as
+  common. Because the crescendo is *supposed* to be rising, one finger landing harder
+  than its neighbours sounds plausible in context and passes unnoticed.
 - **Dynamic shape.** "Start soft, grow to the top, come back symmetrically" is easy to
   state and hard to verify. Players routinely believe they executed a smooth crescendo
   when they in fact executed three jumps and a dip.
@@ -171,6 +172,11 @@ moment. So one run produces $N$ onsets per hand, $2N$ MIDI note events in total.
 
 ### Fingering and thumb crossings
 
+> **Dormant as of v1.** Nothing in the analysis path uses any of this. The thumb-crossing
+> metric it fed was removed — see §7.5 for why — and the tables are kept only to annotate
+> findings produced by the §14 consistency detector. The derivation below is documented
+> because the data is still correct and will be reused, not because it is live.
+
 #### Why a one-octave array cannot simply be tiled
 
 The finger on the root note **depends on where in the run that root falls**. Ascending
@@ -265,7 +271,7 @@ flowchart TD
     F --> K
     E --> L[Greedy alignment<br/>vs expected sequence]
     F --> L
-    I --> M[Crossing residuals]
+    I --> M[Per-note residuals]
     K --> M
     I --> N[Report]
     J --> N
@@ -679,7 +685,7 @@ symmetrically" instruction expressed numerically.
 
 $u$ is used in two places: directly in `shape` below (compared against min-max
 normalised actual velocities), and rescaled back into velocity units as
-$\hat{v}_i = \min v + u_i(\max v - \min v)$ for the crossing residuals in §7.5.
+$\hat{v}_i = \min v + u_i(\max v - \min v)$ for the per-note residuals in §7.5.
 
 #### Shape fidelity — scale-invariant
 
@@ -817,25 +823,30 @@ rather than clean.
 
 ---
 
-### 7.5 Thumb-crossing accents
+### 7.5 Per-note residuals
 
-The crossing indices $C$ are known in advance from the fingering (see [§3](#3-the-exercise)),
-so this needs no detection — only measurement.
+Each note's deviation from where it should have been. These feed the per-note strip
+(§8), and are the raw material for the planned consistency detector (§14).
 
-#### Measure residuals, not raw values
+$$hat{v}_i = min_j v_j + u_ileft(max_j v_j - min_j v_jight)$$
 
-Velocity is *supposed* to be rising through the crescendo, so a loud thumb note proves
-nothing on its own. The comparison must be against what that note should have been:
+That is the ideal triangle from §7.3, rescaled to the player's own dynamic range. Then:
 
-$$\hat{v}_i = \min_j v_j + u_i\left(\max_j v_j - \min_j v_j\right)$$
+$$mathrm{vres}_i = v_i - hat{v}_i qquad [	ext{velocity units}]$$
 
-That is the ideal triangle rescaled to the player's own dynamic range. Then:
+$$mathrm{tres}_i = r_i = mathrm{IOI}_i - (a + b,i) qquad [	ext{ms}]$$
 
-$$\mathrm{vres}_i = v_i - \hat{v}_i \qquad [\text{velocity units}]$$
+The timing residuals are reused directly from [§7.1](#71-timing--three-way-decomposition).
+Since the hands play together there is one shared timing residual sequence, while the
+velocity residuals are per hand.
+
+**Measure residuals, not raw values.** Velocity is *supposed* to be rising through the
+crescendo, so a loud note proves nothing on its own — only loud *relative to where the
+crescendo should have been at that point* means anything.
 
 > **What the ideal is at the endpoints, and the bias this creates.** Because the ramp is
-> anchored to the player's own extremes, $\hat{v}_0 = \min_j v_j$ exactly, and
-> $\hat{v}_k = \max_j v_j$ exactly. So the ideal for the **first** note is "your quietest
+> anchored to the player's own extremes, $hat{v}_0 = min_j v_j$ exactly, and
+> $hat{v}_k = max_j v_j$ exactly. So the ideal for the **first** note is "your quietest
 > note of the whole run" — not whatever you happened to play first.
 >
 > That is deliberate, and it carries real information: in a correct triangle the first
@@ -847,84 +858,71 @@ $$\mathrm{vres}_i = v_i - \hat{v}_i \qquad [\text{velocity units}]$$
 >
 > | Position | Ideal is | Residual can only be |
 > |---|---|---|
-> | first note | the run's minimum | $\ge 0$ |
-> | peak note $k$ | the run's maximum | $\le 0$ |
-> | last note | the run's minimum | $\ge 0$ |
+> | first note | the run's minimum | $ge 0$ |
+> | peak note $k$ | the run's maximum | $le 0$ |
+> | last note | the run's minimum | $ge 0$ |
 >
 > A least-squares fit of the triangle — the same treatment §7.1 gives timing — would
 > remove the bias and make the residuals sum to zero, at the cost of an ideal line no
 > longer passing through the player's actual extremes. Worth revisiting in v2; the
 > min/max anchoring is simpler to explain and the bias only affects three of 29 notes.
 
-$$\mathrm{tres}_i = r_i = \mathrm{IOI}_i - (a + b\,i) \qquad [\text{ms}]$$
+#### Removed in v1: fingering-derived thumb-crossing bumps
 
-The timing residuals are reused directly from [§7.1](#71-timing--three-way-decomposition).
-Since the hands play together there is one shared timing residual sequence, while the
-velocity residuals are per hand.
+Earlier versions derived thumb-crossing indices $C$ from a hardcoded fingering table and
+reported how much worse those notes were than the rest:
 
-#### The bump
+$$	ext{bump}_v = rac{1}{|C|} um_{i in C} mathrm{vres}_i - rac{1}{|ar{C}|} um_{i 
+otin C} mathrm{vres}_i$$
 
-Compare crossing notes against everything else:
+**This was removed, and should not be reinstated in this form.** The reasoning, raised by
+a contributor who plays with non-standard fingering adapted for range-of-motion
+limitations:
 
-$$\boxed{\ \text{bump}_v = \frac{1}{|C|}\sum_{i \in C} \mathrm{vres}_i \;-\; \frac{1}{|\bar{C}|}\sum_{i \notin C} \mathrm{vres}_i \ } \qquad [\text{velocity units}]$$
+1. **The fingering is an assumption, and it can be wrong.** A player who does not use the
+   standard fingering receives confident findings about notes their thumb never touched,
+   and silence about the notes it did. Worse, a player may not know whether their own
+   fingering is standard, so the error is undetectable from their side and unfixable by
+   configuration.
+2. **It made the app blind to every non-thumb fault.** Pre-filtering to crossings means
+   the only fault that can ever be found is a thumb fault. A weak fourth finger — probably
+   the most common dynamics problem in piano playing, the fourth being the least
+   independent — was structurally invisible.
+3. **Detection does not need the fingering.** Unevenness is observable; fingering is not.
+   If the thumb lands heavy, the notes where it lands show elevated residuals on their
+   own, whatever notes those happen to be. The method can *discover* the crossings rather
+   than assume them.
 
-$$\boxed{\ \text{bump}_t = \frac{1}{|C|}\sum_{i \in C} \mathrm{tres}_i \;-\; \frac{1}{|\bar{C}|}\sum_{i \notin C} \mathrm{tres}_i \ } \qquad [\text{ms}]$$
+The replacement is the consistency detector in §14: aggregate each note position's
+residual across runs and flag positions that are both large and repeated. Fingering
+returns only as an optional, hedged *annotation* on such a finding ("these are where the
+thumb typically crosses in this scale"), never as a filter on what is measured. The
+tables and `deriveCrossings` remain in `src/scale.js`, dormant and marked as such.
 
-#### Why a contrast rather than the raw crossing residuals
+#### One thing from the old design that must survive into the new one
 
-The obvious alternative is to report $\mathrm{vres}_i$ for each $i \in C$ directly and
-skip the subtraction. The contrast is used instead because **a raw residual cannot tell a
-thumb problem apart from a whole-run shape problem.**
+The removed metric was a **contrast** — crossing notes against everything else — rather
+than a raw average of crossing residuals, and that choice was correct for a reason that
+still applies.
 
-The ideal ramp $\hat{v}$ is anchored to the player's own min and max, but only at the
-endpoints — the middle is free to deviate, and $\sum_i \mathrm{vres}_i \ne 0$ in general.
-So a player whose crescendo bulges above the straight ramp has *every* mid-run note
-sitting high:
+$hat{v}$ is anchored to the player's min and max only at the endpoints, so the middle is
+free to deviate and $ um_i mathrm{vres}_i 
+e 0$ in general. A player whose crescendo
+bulges above the straight ramp has *every* mid-run note sitting high:
 
-| Player | Crossing $\mathrm{vres}$ | Non-crossing $\mathrm{vres}$ | Raw reading | $\text{bump}_v$ |
+| Player | $mathrm{vres}$ at a given note | $mathrm{vres}$ elsewhere | Raw reading | Contrast |
 |---|---|---|---|---|
-| Convex crescendo, thumb fine | +6 | +6 | "crossings are 6 units loud" ✗ | **0** ✓ |
-| Straight crescendo, heavy thumb | +9 | 0 | "crossings are 9 units loud" ✓ | **+9** ✓ |
-| Convex crescendo *and* heavy thumb | +15 | +6 | "crossings are 15 units loud" ✗ | **+9** ✓ |
+| Convex crescendo, even touch | +6 | +6 | "this note is 6 units loud" ✗ | **0** ✓ |
+| Straight crescendo, one heavy note | +9 | 0 | "this note is 9 units loud" ✓ | **+9** ✓ |
+| Convex crescendo **and** heavy note | +15 | +6 | "this note is 15 units loud" ✗ | **+9** ✓ |
 
-In the first case the thumb is not the fault at all — the crescendo shape is, and `shape`
-already scores exactly that. Reporting the raw residual would diagnose a thumb problem
-that doesn't exist, and in the third case would overstate a real one. Subtracting the
-non-crossing mean removes whatever error is **common to all notes**, leaving only the
-component specific to crossings. It is a difference-in-means contrast, and it keeps this
-metric from double-counting with `shape` — the same orthogonality discipline as §7.1.
+In the first case nothing is wrong with that note — the crescendo's *shape* is off, and
+`shape` already scores exactly that. Reporting the raw residual would invent a per-note
+fault that does not exist, and in the third case would overstate a real one.
 
-The second reason is statistical. Note-to-note velocity varies by several units from
-motor noise alone, so one crossing's residual is a single noisy sample. The finding being
-made is explicitly a claim about a *group* — "crossings are **systematically** worse" —
-and that claim requires aggregation to support it.
-
-> **What the aggregate throws away.** Per-crossing residuals are genuinely useful and are
-> not currently retained: which crossing was worst, and whether ascending crossings
-> (thumb passing *under*) differ from descending ones (finger crossing *over*), which are
-> different physical motions and plausibly differ systematically. §6's own example prose
-> — "most consistent at F ascending" — cannot actually be produced by the current
-> implementation for this reason. The per-note strip does show each note's dynamics
-> residual, so the information is on screen; it just isn't labelled as a crossing or
-> summarised. Retaining the per-crossing values alongside the contrast would fix both.
-> See §13.
-
-#### Reporting rules
-
-Reported **only** when $|\text{bump}_v| > 5$ velocity units or $|\text{bump}_t| > 10$ ms.
-A single bumpy note is noise; the finding is that crossings are *systematically* worse.
-Aggregating across several runs would make this far more reliable, which is a planned
-improvement.
-
-Output is prose, not a number:
-
-> Your thumb crossings average 9 velocity units louder than the rest of the scale and
-> land about 15 ms late.
-
-Because $\mathrm{tres}$ has length $N-1$ (one per interval, not per note), a crossing at
-the final index contributes to $\text{bump}_v$ but not to $\text{bump}_t$.
-
----
+**So the consistency detector must compare each position against the rest of its own run,
+not against zero.** This applies to every metric the detector is extended to, not just
+dynamics: the same common-mode problem arises for timing residuals when a player drifts.
 
 ### 7.6 Legato / articulation
 
@@ -1190,7 +1188,6 @@ Each candidate finding carries a severity, and the three highest survive:
 | Finding | Trigger | Severity |
 |---|---|---|
 | Hand sync lead | $\lvert\text{bias}\rvert > 5$ ms | $\lvert\text{bias}\rvert / 5$ |
-| Thumb crossings (per hand) | $\lvert\text{bump}_v\rvert > 5$ or $\lvert\text{bump}_t\rvert > 10$ | $\max(\lvert\text{bump}_v\rvert/5,\ \lvert\text{bump}_t\rvert/10)$ |
 | Crescendo dips | any reversal at step $i < k$ | count of those reversals |
 | Diminuendo swells | any reversal at step $i \ge k$ | count of those reversals |
 | Narrow dynamic range | $\text{range} < 30$ | $(30 - \text{range})/10$ |
@@ -1212,7 +1209,7 @@ crescendo dips.
 
 Example output:
 
-> - Your thumb crossings are landing 15 ms late, both ascending and descending.
+> - Your left hand is losing tempo relative to your right over the run.
 > - Your left hand is consistently 8 ms ahead of your right.
 > - Your crescendo dipped at notes 4 and 9.
 
@@ -1251,11 +1248,6 @@ these objects):
       "L": { "shape": 0.87, "range": 44, "reversals": [9],    "lumpiness": 0.31 }
     },
     "sync": { "bias": -8.4, "error": 11.2 },
-    "crossings": {
-      "indices": { "RH": [3, 7, 10, 19, 22, 26], "LH": [5, 8, 12, 17, 21, 24] },
-      "RH": { "bumpV": 9.1, "bumpT": 15.3 },
-      "LH": { "bumpV": 4.2, "bumpT": 11.8 }
-    },
     "legato": {
       "R": 0.04, "L": 0.09,
       "absR": 0.07, "absL": 0.12,
@@ -1277,7 +1269,6 @@ Notes on the shape:
   step from note 4 to note 5 went the wrong way, so the note out of line is note 5
   0-based — note 6 as a player would count it. The findings layer does that conversion;
   anything else reading this field must do it too.
-- `crossings` is split per hand, because the two hands cross at different indices.
 - Intermediate arrays used only to draw the current report (per-note residuals, the
   ideal velocity curve, the paired stream) are **stripped before persisting** —
   they are all recomputable and would otherwise multiply the stored size of every run.
@@ -1298,7 +1289,7 @@ DOCUMENTATION.md    This file
 src/
   main.js           Entry point, screen routing, event wiring, run lifecycle
   midi.js           Web MIDI access, Recorder class, note pairing, CC64 watch
-  scale.js          Scale + fingering tables, sequence generation, crossing derivation
+  scale.js          Scale tables, sequence generation (+ dormant fingering data)
   metrics.js        Hand separation, pairing, and every §7 metric
   stats.js          mean, population stdev, least-squares fit
   run.js            Orchestrates one run: raw events + config → full metrics object
@@ -1335,7 +1326,7 @@ made it testable by feeding synthetic events straight into `analyzeRun`.
 | Tempo not set | Start button disabled — $T$ is required by three subsystems |
 | Stop pressed with zero notes | Returns to config; no empty run is stored |
 | Fewer than 2 notes in a hand | Dynamics and legato for that hand → `null` |
-| Hand streams differ in length | Run flagged; timing, sync and crossings → `null`; correctness, dynamics, legato and balance still computed per hand |
+| Hand streams differ in length | Run flagged; timing and sync → `null`; correctness, dynamics, legato and balance still computed per hand |
 | Played note count ≠ expected $N$ | Peak index clamped to $\min(k,\ \text{len}-1)$; metrics computed over the actual length, so a short run degrades rather than crashes |
 | All velocities identical | $\max v - \min v = 0$; normalised velocities default to 0, lumpiness to 0 |
 | Note-off with no matching note-on | Ignored |
@@ -1358,14 +1349,13 @@ metric is `null` and every unreliable run carries a visible flag.
 | Unsupported-browser detection | ✅ |
 | Three-step onboarding, config screen, start/stop run control | ✅ |
 | C major sequence generation, 1–4 octaves | ✅ |
-| Fingering expansion and crossing derivation, per hand | ✅ |
 | Hand separation by onset clustering | ✅ |
 | Timing decomposition (offset, drift, jitter) on the paired timeline | ✅ |
 | Per-hand timing + drift difference, with drill-down panel and finding | ✅ |
 | Note correctness — greedy aligner with lookahead | ✅ |
 | Dynamics — shape, range, reversals, lumpiness, per hand | ✅ |
 | Hand synchronisation — bias and error | ✅ |
-| Thumb-crossing bumps — velocity and timing, per hand | ✅ |
+| Per-note velocity and timing residuals (strip + raw material for §14) | ✅ |
 | Legato — signed mean, unsigned mean and variance, per hand, all three surfaced | ✅ |
 | Hand balance | ✅ |
 | Sub-metric bars | ✅ |
@@ -1380,9 +1370,8 @@ metric is `null` and every unreliable run carries a visible flag.
 |---|---|
 | **Metronome is inert** | The checkbox exists and its value is captured into the run config and persisted, but no audible click is generated — there is no Web Audio code in the project. Either implement it or remove the control; a switch that does nothing is worse than no switch. |
 | Strip does not wrap | Beyond ~4 octaves the strip scrolls horizontally rather than wrapping to a second line. |
-| Crossing findings are per-run | The finding is meant to be that crossings are *systematically* worse; aggregating across runs would make it far more reliable than a single run can. |
 | No per-note legato visual | Articulation is reported as three numbers per hand, not as a strip row. A deliberate v1 call — the strip already carries four rows and two more earned their space less than they cost in clutter. The per-note gaps are computed, so adding a row later is a few lines. |
-| Per-crossing residuals not retained | §7.5 reports only the aggregate contrast, so "which crossing was worst" and "do ascending crossings differ from descending ones" can't be answered — including §6's own example prose, "most consistent at F ascending", which the implementation cannot currently produce. |
+| No per-note fault detection yet | Residuals are computed and shown on the strip, but nothing aggregates them across runs to say "this position is consistently off". That is the §14 consistency detector, and it is what replaced the removed thumb-crossing metric. |
 | Sparkline shows jitter only | Any stored metric could be trended; jitter was chosen as the single most diagnostic. |
 | Not tested on hardware | See [§16](#16-testing). |
 
@@ -1461,18 +1450,57 @@ before those scales ship. Likewise, the model assumes one fixed cycle per hand p
 scale; it does not express fingerings that change between the first and later octaves
 beyond the `first`/`last` overrides.
 
-### v2.4 — Cross-run aggregation
+### v2.4 — The consistency detector
 
-Thumb-crossing findings, hand-sync bias and hand balance are all *habits*. Single-run
-estimates of a habit are noisy; averaging the same metric across the last $n$ runs would
-sharply increase confidence and let the app distinguish "you did this today" from "you
-always do this."
+**The replacement for the removed thumb-crossing metric (§7.5), and the single most
+important planned feature.**
+
+The principle: a fault worth reporting is one that *repeats*. Hand-sync bias, hand
+balance and a heavy finger are all **habits**, and a single run cannot distinguish a
+habit from a bad day. Aggregating across runs can.
+
+Designed to be **metric-agnostic from the start** — it takes any per-note quantity, not
+just dynamics. The same machinery should serve velocity residuals, timing residuals,
+articulation gaps and hand-sync error, because "which position is consistently off?" is
+the same question in every case.
+
+#### Shape of it
+
+For note position $i$ across the player's last $R$ runs, take the per-run residuals
+$\mathrm{res}_i^{(1)} \dots \mathrm{res}_i^{(R)}$ and flag positions that clear **two**
+gates:
+
+| Gate | Why |
+|---|---|
+| **Magnitude** — mean residual exceeds a practical threshold | A perfectly repeatable 1-unit deviation is not worth a player's attention |
+| **Repetition** — it recurs in most runs, e.g. 11 of 14 | This is what handles multiple comparisons. Scanning 29 positions, some will look extreme in any single run by chance; noise does not repeat 11 times out of 14 |
+
+Report it in those terms rather than as a statistic — *"note 11 (F5) comes out 9 velocity
+units loud in 11 of your last 14 runs"* is both more honest and more usable than a
+p-value.
+
+#### Two constraints carried over from §7.5
+
+1. **Compare each position against the rest of its own run, not against zero.** A
+   player whose whole crescendo bulges has every note high; without the contrast the
+   detector flags everything and duplicates what `shape` already measures. This applies
+   to every metric it is extended to.
+2. **Fingering may annotate a finding, never gate it.** If flagged positions coincide
+   with standard crossing points, the dormant tables in `src/scale.js` can append a
+   hedged explanation. That ordering — detect first, explain second — is the whole point
+   of the §7.5 removal and must not be inverted.
+
+#### No storage change needed
+
+Every run already persists its complete raw `events`, and residuals are fully
+recomputable from those plus `config` (§10). The detector can therefore run
+**retroactively over every run already in a player's history** — nothing has to be
+replayed, and the feature works the first time it ships for anyone with existing runs.
 
 ### Smaller items
 
 - Implement or remove the metronome.
 - Wrap the strip beyond 4 octaves.
-- Name the worst individual crossing in the findings prose.
 - Let the player choose which metric the sparkline trends.
 - Clear-history control in the UI (`clearHistory` exists but is unused).
 
@@ -1532,7 +1560,7 @@ prints the live count, which is the number to trust:
 | Area | What's covered |
 |---|---|
 | Sequence generation | Note count and peak index formulas, the top note struck once not twice, descending mirrors ascending, LH = RH − interval |
-| Fingering / crossings | Full 2-octave fingering for both hands (thumb on the octave join, 5 only on the terminal note), derived crossing indices for 1 and 2 octaves, and that LH and RH cross at different indices |
+| Fingering / crossings (dormant data) | Full 2-octave fingering for both hands (thumb on the octave join, 5 only on the terminal note), derived crossing indices for 1 and 2 octaves, and that LH and RH cross at different indices. Protects the tables for their future use as an annotation layer; no metric depends on them. |
 | Pure math | `linreg` recovers a known slope/intercept exactly; `idealRamp` peaks at exactly 1 |
 | Note alignment | Exact match, one insertion, one deletion, one substitution — each classified correctly, not cascaded |
 | Full pipeline (`analyzeRun`) | A clean run scores clean across every metric; hand-pitch-overlap doesn't break separation (see below); one wrong note doesn't tank overall accuracy; a hand-count mismatch flags the run and nulls timing/sync while still computing dynamics; the pedal flag propagates; an all-flat-velocity run degrades to documented values (§12) instead of `NaN` or a crash |

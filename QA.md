@@ -1189,3 +1189,101 @@ tempo fault.
 That mismatch is itself worth chasing — it means the onset clustering (§6) didn't
 cleanly pair your hands on a real performance, which is exactly the open question §15
 flagged as needing real-player validation. Worth looking at the raw event log next time.
+
+---
+
+## Batch 8 — 2026-10-09
+
+### Thumb-crossing metric removed
+
+Raised by **DougyWW** on Discord, who plays with non-standard fingering adapted for
+range-of-motion limitations:
+
+> If the goal is to measure the smoothness of a scale I'd ask why does the crossover even
+> matter? If a note is consistently louder or softer than its neighbours does that not
+> make it an issue? […] I guess what I'm saying is identifying any finger that's
+> consistently uneven would seem to be the goal.
+
+He is right, and the argument generalises further than it first appears.
+
+#### What was wrong with it
+
+The pipeline ran **assumed fingering → derive crossing indices → test those notes**. That
+makes fingering an *input*, and three things follow:
+
+1. **The assumption can be wrong and the player can't correct it.** Dougy's own words:
+   he can't say which of his scales use atypical fingering. So the error is invisible from
+   his side and unfixable by configuration. He would get confident findings about notes
+   his thumb never touched and silence about the notes it did.
+2. **It made the app blind to every non-thumb fault.** Pre-filtering to crossings means
+   a thumb fault is the only fault findable. A weak fourth finger — anatomically the least
+   independent, and probably the most common dynamics problem there is — was structurally
+   invisible.
+3. **Detection never needed the fingering in the first place.** Unevenness is observable;
+   fingering is not. If the thumb lands heavy, the notes where it lands show elevated
+   residuals *on their own*, whatever notes those are. The method can discover crossings
+   instead of assuming them — and it then works for any hand, any adaptation, any scale.
+
+Point 3 is the one that settles it. The fingering table was never doing measurement work,
+only *targeting* work, and the target can be found empirically.
+
+#### What it cost, and why that cost is now affordable
+
+The removed metric was not worthless. Pooling six known crossings into one contrast is a
+**pre-registered hypothesis**: you decide before looking which notes to test, which buys
+real statistical power within a single run. Scan all 29 positions for "which is worst"
+instead and some position always looks extreme by chance.
+
+That objection dissolves with repetition — which is exactly what Dougy's word
+*"consistently"* was pointing at, in both his messages. Noise does not recur in 11 runs
+out of 14. So the shortcut was worth having while a run was all the data there was, and
+stops being worth its assumption once there is history.
+
+#### What replaced it
+
+Nothing, yet — deliberately. A single run contains no "consistently", so shipping a
+single-run version of the replacement would be dishonest. For now the per-note strip
+shows every note's residual and the app makes no claim about which positions are habitual.
+
+The replacement is specified as §14, "the consistency detector": aggregate each position's
+residual across runs, flag positions that are both **large** and **repeated**, report as
+*"note 11 (F5) comes out 9 velocity units loud in 11 of your last 14 runs."* It is
+specified to be metric-agnostic — the same machinery over timing residuals, articulation
+gaps and sync error, since "which position is consistently off?" is one question in every
+case.
+
+#### What survived the removal
+
+Two things, both now recorded in §7.5 so they aren't rediscovered the hard way.
+
+**The residuals themselves.** $\mathrm{vres}_i$ and $\mathrm{tres}_i$ were never the
+problem — only the fingering-shaped filter over them. They still feed the strip and are
+the detector's raw material.
+
+**The contrast argument.** The old metric compared crossings *against the rest of the
+run* rather than against zero, and that was correct for a reason that still applies:
+$\hat{v}$ is anchored only at the endpoints, so $\sum_i \mathrm{vres}_i \ne 0$ and a
+player whose crescendo bulges has every mid-run note sitting high. Without the contrast
+the detector would flag all of them and duplicate what `shape` already measures. **So the
+detector must compare each position against the rest of its own run** — for every metric
+it is extended to, not just dynamics.
+
+#### Consequences elsewhere
+
+- `FINGERINGS`, `generateFingering` and `deriveCrossings` are now **dormant**: no metric
+  references them. They carry a banner in `src/scale.js` explaining that the removal was
+  deliberate and that they must never again gate what gets measured. They are retained for
+  one job — optionally *annotating* a detector finding ("these are where the thumb
+  typically crosses"), after detection, hedged.
+- Their tests are kept, relabelled as protecting dormant data rather than live behaviour.
+- **Adding a scale no longer requires fingering.** `CONTRIBUTING.md` now asks for the
+  interval array only; the fingering entry is optional. A simplification inherited for
+  free from the removal.
+- `computeCrossingBump` was deleted outright. The annotation layer appends text; it does
+  not compute a contrast.
+
+#### A note on ordering
+
+The rule that matters, if anyone is tempted to reinstate something like this: **detect
+first, explain second.** Fingering may decorate a finding that the data produced on its
+own. The moment it decides what gets measured, every objection above comes back.

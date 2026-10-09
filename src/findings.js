@@ -15,22 +15,6 @@ export function generateFindings(run) {
     });
   }
 
-  if (m.crossings) {
-    for (const hand of ["RH", "LH"]) {
-      const c = m.crossings[hand];
-      const idx = m.crossings.indices[hand];
-      if (!c || idx.length === 0) continue;
-      const bits = [];
-      if (Math.abs(c.bumpV) > 5) bits.push(`${Math.abs(c.bumpV).toFixed(0)} velocity units ${c.bumpV > 0 ? "louder" : "softer"}`);
-      if (Math.abs(c.bumpT) > 10) bits.push(`about ${Math.abs(c.bumpT).toFixed(0)} ms ${c.bumpT > 0 ? "late" : "early"}`);
-      if (bits.length === 0) continue;
-      const label = hand === "RH" ? "right-hand" : "left-hand";
-      candidates.push({
-        severity: Math.max(Math.abs(c.bumpV) / 5, Math.abs(c.bumpT) / 10),
-        text: `Your ${label} thumb crossings average ${bits.join(" and ")} than the rest of the scale.`,
-      });
-    }
-  }
 
   for (const hand of ["L", "R"]) {
     const d = m.dynamics[hand];

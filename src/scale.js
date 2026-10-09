@@ -9,6 +9,28 @@ export const ROOT_PITCH = {
   C: 60,
 };
 
+// ---------------------------------------------------------------------------
+// DORMANT as of v1 — read this before using any of it.
+//
+// FINGERINGS, generateFingering and deriveCrossings are NOT used by any metric.
+// They were removed from the analysis path deliberately, not by accident.
+//
+// The app used to derive thumb-crossing indices from a hardcoded fingering table and
+// test only those notes for velocity/timing bumps. That assumes the player uses the
+// standard fingering. A player with non-standard fingering (adapted for range of
+// motion, say) gets findings about notes their thumb never touched, and no finding
+// about the notes it did. It also made the app structurally incapable of noticing any
+// fault that is not a thumb fault — a weak 4th finger, for instance.
+//
+// The replacement, planned in DOCUMENTATION.md §14, finds uneven notes EMPIRICALLY:
+// aggregate each note position's residual across runs and flag the positions that are
+// both large and repeated. That needs no fingering knowledge and works for any hand.
+//
+// This table is kept only to ANNOTATE such a finding after the fact ("these are where
+// the thumb typically crosses in this scale"), as a hedged explanation offered to the
+// player. It must never again gate what gets measured.
+// ---------------------------------------------------------------------------
+
 // Fingering is stored as a 7-note repeating cycle plus the two notes that break it.
 //
 // A one-octave array can't be tiled directly: the finger on the root changes depending

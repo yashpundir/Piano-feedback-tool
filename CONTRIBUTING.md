@@ -51,8 +51,12 @@ so it can be tested this way without a browser doing anything except running JS.
 ## Adding a scale
 
 The data structures are already general — see `DOCUMENTATION.md` §3 (storage model) and
-§14 ("v2.3 — More scales"). Adding a scale is data only, with no code changes: two
-additions to `src/scale.js`.
+§14 ("v2.3 — More scales"). Adding a scale is data only, with no code changes.
+
+**Only the first of the two entries below is required.** Fingering no longer feeds any
+metric (see `DOCUMENTATION.md` §7.5 for why that changed), so a scale works with just its
+interval pattern. The fingering entry is optional and currently dormant — add it if you
+know the standard fingering, and it will be reused when the consistency detector lands.
 
 **1. The interval pattern**, as semitone offsets from the root, in `SCALES`:
 
@@ -65,7 +69,7 @@ export const SCALES = {
 
 (And a root pitch in `ROOT_PITCH` if the scale starts on a new note.)
 
-**2. A fingering entry per hand** in `FINGERINGS`. Note that this is **not** a
+**2. (Optional, dormant) A fingering entry per hand** in `FINGERINGS`. Note that this is **not** a
 one-octave array — a one-octave array cannot be tiled, because the finger on the root
 changes depending on where in the run that root falls. Instead each hand stores a
 repeating cycle plus the two notes that break it:
@@ -88,7 +92,8 @@ export const FINGERINGS = {
 The thing to get right is `cycle[0]`: it is the finger for the root **at an octave
 boundary mid-run**, which for both hands in C major is the thumb. Putting the terminal
 finger there instead is the bug this model was introduced to fix — it silently erased a
-real thumb crossing from the analysis. There are tests covering exactly this; run them.
+real thumb crossing from the analysis back when the metric was live. There are tests
+covering exactly this; run them.
 
 Worked examples for scales that break the pattern differently, including B flat major
 (whose root is a black key the thumb never plays, so `first`, `cycle[0]` and `last` are

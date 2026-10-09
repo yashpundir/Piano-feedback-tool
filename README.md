@@ -12,9 +12,10 @@ Three things go wrong in scale practice that you cannot hear from the bench:
 
 - **Hand synchronisation.** A consistent 10–15 ms lag between the hands is inaudible as a
   discrete event, but it is exactly what makes a scale sound smeared rather than clean.
-- **Thumb-crossing accents.** The thumb is heavier than the other fingers, so crossings
-  land louder and later. Because the crescendo is *supposed* to be rising, a loud thumb
-  note sounds plausible and passes unnoticed.
+- **A consistently heavy finger.** The thumb is heavier than the others and tends to
+  thump on crossings, but any finger can be the culprit — a weak fourth is just as common.
+  Because the crescendo is *supposed* to be rising, one finger landing harder than its
+  neighbours sounds plausible and passes unnoticed.
 - **Dynamic shape.** "Start soft, grow to the top, come back symmetrically" is easy to say
   and hard to verify. Players routinely believe they played a smooth crescendo when they
   played three jumps and a dip.
@@ -54,8 +55,8 @@ refuses to run without it.
 Working today: MIDI capture and device picking, C major in 1–4 octaves, and the full
 metric set — timing (tempo offset, drift, jitter, per hand and combined), note accuracy
 by edit-distance alignment, dynamics (shape, range, reversals, lumpiness), hand
-synchronisation, thumb-crossing accents, legato, hand balance and sustain-pedal
-detection. The report gives sub-metric bars, a per-note strip, a velocity chart against
+synchronisation, per-note velocity and timing residuals, legato, hand balance and
+sustain-pedal detection. The report gives sub-metric bars, a per-note strip, a velocity chart against
 the ideal shape, prioritised plain-English findings, and `localStorage` history with JSON
 export.
 
